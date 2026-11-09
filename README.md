@@ -1,8 +1,60 @@
 # Smart Inventory and Procurement System
 
-A Java desktop application for managing inventory, sales, purchasing, suppliers, and stock accountability. Beyond maintaining product records, the system will explain reorder recommendations, enforce purchase approvals, track batches and expiry dates, and retain the history behind every stock change.
+A Java desktop application for managing inventory, sales, purchasing, suppliers, and stock accountability. The working foundation explains replenishment suggestions, enforces independent purchase approvals, supports partial deliveries, and preserves the history behind stock changes. Batch and expiry tracking remain planned.
 
-> **Project status:** Planning. This README is the implementation blueprint; the features described below are not implemented yet. The workspace currently contains documentation only.
+**Business context:** VoltEdge Electronics, a fictional retailer of phone and computer accessories. VoltEdge is the company using this application; the project and repository names remain unchanged. See the [electronics domain and class design](docs/electronics-domain.md) for the agreed categories and Java OOP design.
+
+> **Project status:** Java foundation with JDBC persistence and a working localhost demo implemented (0.1). Product creation/editing/deactivation, service-level permissions, stock receipts and sales, low-stock detection, immutable movement history, and request retry protection work with both in-memory and H2 repositories. Six electronics detail classes implement `ProductDetails` with category-specific validation and JDBC persistence. The localhost workspace also supports search, category/status filters, category-specific forms, legacy-record views, CSV export, date-filtered analytics, supplier quotes, purchase orders, independent approvals, partial receipts, and purchase event history. The remaining sections describe the full roadmap unless explicitly marked implemented. See [foundation details](docs/foundation.md).
+
+## Run the current foundation
+
+Prerequisites: JDK 21 and Maven 3.9 or later. H2 is bundled into the executable JAR; no database server is needed for this version.
+
+```sh
+mvn clean verify
+java -jar target/inventory-management-system-0.1.0-SNAPSHOT.jar
+```
+
+The scripted console demo registers an electronics charger, receives 10 units, sells 6, retries the same sale safely, reports 4 units remaining, and demonstrates permission and overselling checks. It does not provide an interactive menu or login. Data resets when the process exits. The frontend will be built after the core workflows.
+
+### Open the persistent localhost workspace
+
+```sh
+java -jar target/inventory-management-system-0.1.0-SNAPSHOT.jar --serve --seed-demo --port=8081
+```
+
+Open [http://localhost:8081](http://localhost:8081). Select product names to inspect their stock histories. The workspace shows real data read by Java services from the embedded database. It uses a trusted demo manager rather than a login screen. Forms support product creation/editing, stock receipts, quantity-based sales, and zero-stock deactivation. Search, category/status filters, and CSV export are also available. The Analytics, Replenishment, and Purchase orders sections connect demand review to receiving goods. These are Java service workflows with a lightweight browser adapter; the final frontend is still planned.
+
+- Data is saved in `data/inventory.mv.db`, relative to the directory where the command is run.
+- `--seed-demo` loads six VoltEdge electronics products and their receipts/sales (one per category). Stable request IDs make repeated seeding safe.
+- Omit `--seed-demo` to leave existing data unchanged or start with an empty database.
+- `--serve` defaults to port 8080; use `--port=8081` if 8080 is occupied.
+- Stop the server with Ctrl+C. Restarting preserves products, history, and retry protection.
+- The server listens only on `127.0.0.1`. Only one application process should open this H2 file at a time.
+- Read endpoints: `/`, `/?sku=VE-CHG-001`, `/api/inventory`, `/export/inventory.csv`, and `/health`. Writes use validated POST forms with a form token and request IDs for stock changes.
+
+Electronics appear by default. Use **Catalogue view → Legacy records** to inspect older products. The additive V002 migration preserves their original data. Choose a product category and click **Show category fields** before entering a new product; the form then shows that category’s specifications.
+
+### Analytics and low-stock ordering
+
+Use **Analytics** to select an inclusive date range (up to 366 days, Asia/Kolkata). It shows recorded sales/receipt units, daily trends, best sellers, coverage estimates when enough history exists, and current retail stock value. Retail stock value is not revenue, profit, or cost valuation.
+
+Use **Replenishment** to review a low-stock suggestion and its calculation. Add a supplier quote if none exists, then choose quantity and create a purchase draft. An open order prevents a second active order for that SKU. Fewer than seven observed days use a threshold-based fallback rather than a forecast.
+
+1. Create a purchase order from a replenishment card.
+2. Submit it with a reason.
+3. Use **Demo identity → demo-approver** to review it as another actor. Self-approval is blocked.
+4. Approve or reject with a reason.
+5. Receive an approved delivery, partially or fully. Stock, order quantities, receipt links, and event history commit together.
+6. Inspect the order history. Cancellation is allowed only before any receipt.
+
+Identity switching is available only in the explicitly enabled local demo. It is not password authentication. Orders and supplier quotes are local records; no supplier messages or payments occur. See the [implementation and verification plan](docs/analytics-procurement-plan.md) for calculations and limits.
+
+The original console demo remains in-memory; only `--serve` uses persistent storage. MySQL integration is planned and has not been tested or implemented.
+
+The local dashboard now follows the supplied conveyor-and-charcoal visual reference. See [design reference and generated asset prompt](docs/design-reference.md).
+
+See [reference systems and workflow mapping](docs/references.md) for how ERPNext and InvenTree informed the current implementation.
 
 ## 1. Project objectives
 
@@ -19,13 +71,13 @@ A Java desktop application for managing inventory, sales, purchasing, suppliers,
 | Language | Java 21 | Application code and business logic |
 | Desktop interface | Java Swing | Forms, tables, dashboards, and dialogs |
 | Build tool | Maven | Dependencies, compilation, and tests |
-| Database | MySQL | Persistent, relational business data |
+| Database | H2 implemented locally; MySQL planned | Persistent, relational business data |
 | Database access | JDBC with prepared statements | Explicit SQL and transaction handling |
 | Testing | JUnit 5 | Business-rule and integration verification |
 | Logging | Java logging API | Application diagnostics |
 | Money and dates | `BigDecimal`, `java.time` | Accurate monetary calculations and date handling |
 
-Java is the primary implementation language. SQL supports persistence; this is not a web project. Spring Boot, a JavaScript frontend, and an ORM are outside the initial scope so that the Java logic and JDBC remain visible and understandable. Dependency versions will be pinned when the Maven project is created.
+Java is the primary implementation language. SQL will support persistence; this is not a web project. Spring Boot, a JavaScript frontend, and an ORM are outside the initial scope so that the Java logic and JDBC remain visible and understandable. Current dependency and main build-plugin versions are pinned in `pom.xml`.
 
 ## 3. Users and access management
 
@@ -199,7 +251,7 @@ Swing UI -> Application services -> Domain models and policies
                        |
                  Repository interfaces
                        |
-                JDBC implementations -> MySQL
+                JDBC implementations -> H2 now / MySQL planned
 ```
 
 ```text
@@ -235,7 +287,7 @@ inventory-management-system/
     └── repository/
 ```
 
-This is a proposed structure; only `README.md` exists at present. Create packages as they become necessary rather than filling them with empty classes.
+This is the target structure. The current implementation contains `App`, models, security, services, exceptions, in-memory and JDBC repositories, a local browser adapter in the `preview` package, and unit/integration tests. The implemented H2 schema is at `src/main/resources/database/schema-h2.sql`. The full MySQL schema and UI packages will be added later. Create packages as they become necessary rather than filling them with empty classes.
 
 ### Responsibility rules
 
@@ -248,6 +300,9 @@ This is a proposed structure; only `README.md` exists at present. Create package
 - Construct dependencies in one application entry point; avoid global mutable state.
 
 ## 7. Database plan
+
+The table below is the target design. Current V003 purchasing uses one SKU per purchase order, supplier quotes, receipt-to-movement links, and purchase events. Multi-line orders and a separate supplier/contact master remain later extensions. V002 and V003 preserve existing data.
+
 
 | Table | Main responsibility |
 | --- | --- |
@@ -338,7 +393,7 @@ Test business outcomes and failure paths rather than getters, setters, or code t
 
 ## 13. Local setup status
 
-There is no runnable application yet. Once implementation exists, this section will contain verified instructions for installing prerequisites, creating the database, supplying local credentials, loading sample data, running tests, and launching the application. Build or launch commands will be added only when the corresponding configuration exists and has been checked.
+The current runnable foundation requires JDK 21 and Maven 3.9 or later; use the commands near the top of this README. H2 provides embedded storage and JUnit provides tests. The executable JAR bundles H2. Local preview storage uses H2's local `sa` account with no password and is never exposed as a database server. MySQL setup and credential configuration will be added with that integration. Authentication, complete invoices, and batches are not implemented yet. Purchase approvals work with explicitly labelled demo identities.
 
 ## 14. Future extensions
 

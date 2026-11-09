@@ -1,0 +1,6 @@
+package com.inventory.security;
+
+public enum Permission {
+    VIEW_INVENTORY, MANAGE_PRODUCTS, RECEIVE_STOCK, SELL_STOCK, VIEW_HISTORY,
+    VIEW_ANALYTICS, MANAGE_PURCHASES, APPROVE_PURCHASES
+}
