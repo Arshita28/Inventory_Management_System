@@ -1,17 +1,23 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inventory · Java project preview</title><link rel="stylesheet" href="/assets/dashboard.css"></head>
-<body><a class="skip-link" href="#catalogue">Skip to inventory</a><div class="app-shell">
-<section class="hero" id="home" aria-label="VoltEdge inventory overview">
-<header class="app-header"><a class="brand" href="/" aria-label="Inventory home"><svg viewBox="0 0 28 30" aria-hidden="true"><path d="M14 2 25 8v14l-11 6L3 22V8zM3 8l11 7 11-7M14 15v13"/></svg><span>Inventory<small>VoltEdge Electronics</small></span></a>
-<nav class="top-nav" aria-label="Main navigation">{{navigation}}</nav>
-<div class="header-tools"><a class="header-icon" href="#replenishment" aria-label="Review stock alerts" title="Stock alerts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9M9 21h6"/></svg><i></i></a><details class="identity-menu"><summary title="Demo identity settings" aria-label="Open demo identity settings">VE</summary><div class="identity-dropdown"><span class="section-kicker">LOCAL DEMO · {{role}}</span>{{actorControls}}<p>Demonstration identities; password login is not enabled.</p></div></details></div></header>
-<div class="hero-copy"><span class="hero-eyebrow">VOLTEDGE ELECTRONICS <i></i> LIVE WORKSPACE</span><h1>STOCK.<br>IN CONTROL.</h1><p>Every unit. Every movement. In view.</p></div>
-{{heroWidgets}}<span class="illustration-label">Inventory flow · illustrative scene</span></section>
-<main>{{message}}{{operations}}
-<section class="catalogue-heading"><div><span class="section-kicker">THE DETAILS BEHIND EVERY MOVEMENT</span><h2>Product inventory</h2></div><a class="lime-link" href="#add-product">+ Add product</a></section>
+<title>Inventory · VoltEdge Electronics</title><link rel="stylesheet" href="/assets/dashboard.css"><link rel="stylesheet" href="/assets/workspace.css"><script src="/assets/workspace.js" defer></script></head>
+<body class="workspace" data-initial-view="{{initialView}}"><a class="skip-link" href="#catalogue">Skip to inventory</a>
+<aside class="sidebar" aria-label="Workspace sidebar">
+<a class="brand" href="/" aria-label="Inventory landing page"><svg viewBox="0 0 28 30" aria-hidden="true"><path d="M14 2 25 8v14l-11 6L3 22V8zM3 8l11 7 11-7M14 15v13"/></svg><span>Inventory<small>VoltEdge Electronics</small></span></a>
+<span class="sidebar-label">WORKSPACE</span><nav class="side-nav" aria-label="Main navigation">{{navigation}}</nav>
+<div class="sidebar-footer">{{logoutControl}}</div>
+</aside>
+<div class="workspace-body">
+<header class="workspace-header"><div class="workspace-location"><strong id="current-view-label">Home</strong></div><div class="header-tools"><span class="workspace-demo">{{accountStatus}}</span>{{stockAlerts}}<details class="identity-menu"><summary title="Your account" aria-label="Open account information">VE</summary><div class="identity-dropdown"><span class="section-kicker">{{role}}</span>{{actorControls}}<p>{{identityHelp}}</p></div></details></div></header>
+<main class="workspace-content">{{message}}
+<section class="hero workspace-view" id="home" data-view="home" aria-label="VoltEdge inventory overview">
+<div class="hero-copy"><span class="hero-eyebrow">VOLTEDGE ELECTRONICS <i></i> LIVE WORKSPACE</span><h1>Stock. In control.</h1><p>Every unit. Every movement. In view.</p></div>
+<div class="home-cards">{{heroWidgets}}</div></section>
+{{operations}}{{accountPanel}}
+<section class="workspace-view" id="management" data-view="management" aria-label="Inventory management">
+<section class="catalogue-heading"><div><span class="section-kicker">THE DETAILS BEHIND EVERY MOVEMENT</span><h2>Product inventory</h2></div>{{catalogueActions}}</section>
 <section class="metrics" aria-label="Inventory summary"><div class="metric"><span>Catalogue products</span><strong>{{productCount}}</strong><small>Selected catalogue view</small></div><div class="metric"><span>Units on hand</span><strong>{{unitCount}}</strong><small>Selected catalogue view</small></div><div class="metric alert"><span>Needs attention</span><strong>{{lowCount}}</strong><small>At or below reorder level</small></div></section>
 <div class="layout"><section id="catalogue" class="panel"><div class="panel-title"><h2>Product inventory</h2><p>Select a product name to inspect its stock history.</p></div>{{filters}}<div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th class="number">Unit price</th><th class="number">On hand</th><th class="number">Reorder at</th><th>Status</th></tr></thead><tbody>{{rows}}</tbody></table></div><div class="result-count">{{resultCount}}</div></section>
 <aside class="panel"><div class="panel-title"><h2>Movement history</h2><p>{{selectedName}} · {{selectedSku}}</p><small class="selected-specs">{{selectedDetails}}</small></div>{{stockForms}}<ul>{{history}}</ul></aside></div>
-{{productForms}}<details class="note"><summary>About this local workspace</summary><p><strong>Local working demo</strong><br>Changes are saved on this computer. VoltEdge Electronics is the company using this application. Purchase orders and approval identities are local demonstrations, not authenticated users or supplier transmissions. Login and full invoicing remain planned.</p></details>
-<footer><span>Inventory <i>·</i> VoltEdge Electronics</span><span><a href="/export/inventory.csv">Export inventory CSV ↗</a><a href="/api/inventory">View JSON ↗</a></span></footer></main></div></body></html>
+{{productForms}}</section><details class="note"><summary>About this local workspace</summary><p><strong>Local working demo</strong><br>Changes are saved on this computer. VoltEdge Electronics is the company using this application. Access is controlled by individual accounts and Java service permissions. Purchase orders are local records and are not transmitted to suppliers. Full invoicing remains planned.</p></details>
+<footer><span>Inventory <i>·</i> VoltEdge Electronics</span><span><a href="/export/inventory.csv">Export inventory CSV</a><a href="/api/inventory">View JSON</a></span></footer></main></div></body></html>

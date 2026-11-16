@@ -40,7 +40,7 @@ class ProcurementTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-09T08:00:00Z"), ZoneOffset.UTC);
     private final User manager = new User(UUID.randomUUID(), "manager", Role.MANAGER, true);
     private final User reviewer = new User(UUID.randomUUID(), "reviewer", Role.MANAGER, true);
-    private final User cashier = new User(UUID.randomUUID(), "cashier", Role.CASHIER, true);
+    private final User cashier = new User(UUID.randomUUID(), "cashier", Role.STAFF, true);
 
     @TestFactory
     Stream<DynamicTest> bothAdaptersEnforceTheSameWorkflow() {

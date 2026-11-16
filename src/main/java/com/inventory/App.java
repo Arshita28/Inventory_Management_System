@@ -11,6 +11,8 @@ import com.inventory.preview.LocalPreviewServer;
 import com.inventory.security.AuthorizationService;
 import com.inventory.security.Role;
 import com.inventory.security.User;
+import com.inventory.security.auth.AccessService;
+import com.inventory.security.auth.JdbcAccountRepository;
 import com.inventory.service.InventoryService;
 
 import java.math.BigDecimal;
@@ -31,12 +33,12 @@ public final class App {
             return;
         }
         if (args.length != 0) {
-            throw new IllegalArgumentException("Usage: java -jar inventory.jar [--serve [--seed-demo] [--port=8080]]");
+            throw new IllegalArgumentException("Usage: java -jar inventory.jar [--serve [--seed-demo] [--demo-personas] [--port=8080]]");
         }
         InventoryService inventory = new InventoryService(new InMemoryInventoryRepository(),
                 new AuthorizationService(), Clock.systemUTC());
         User manager = new User(UUID.randomUUID(), "demo-manager", Role.MANAGER, true);
-        User cashier = new User(UUID.randomUUID(), "demo-cashier", Role.CASHIER, true);
+        User cashier = new User(UUID.randomUUID(), "demo-cashier", Role.STAFF, true);
 
         System.out.println("Smart Inventory — Java foundation demo (in-memory, no login)");
         System.out.println("Company: VoltEdge Electronics");
@@ -74,7 +76,7 @@ public final class App {
                 if (port < 1 || port > 65535) {
                     throw new IllegalArgumentException("Port must be between 1 and 65535");
                 }
-            } else if (!argument.equals("--serve") && !argument.equals("--seed-demo")) {
+            } else if (!argument.equals("--serve") && !argument.equals("--seed-demo") && !argument.equals("--demo-personas")) {
                 throw new IllegalArgumentException("Unknown option: " + argument);
             }
         }
@@ -85,11 +87,14 @@ public final class App {
         if (Arrays.asList(args).contains("--seed-demo")) {
             DemoData.seed(inventory);
         }
-        LocalPreviewServer preview = new LocalPreviewServer(inventory, DemoData.MANAGER, port, true);
+        AccessService access = new AccessService(new JdbcAccountRepository("jdbc:h2:file:./data/inventory;LOCK_TIMEOUT=10000"), Clock.systemUTC());
+        boolean demoPersonas = Arrays.asList(args).contains("--demo-personas");
+        if (demoPersonas) access.installDemoPersonas();
+        LocalPreviewServer preview = new LocalPreviewServer(inventory, access, port, demoPersonas);
         Runtime.getRuntime().addShutdownHook(new Thread(preview::close));
         preview.start();
         System.out.println("Inventory preview: http://localhost:" + preview.port());
-        System.out.println("Local working demo (trusted manager); data saved in ./data/inventory.mv.db");
+        System.out.println("Authenticated local workspace; data saved in ./data/inventory.mv.db");
         new CountDownLatch(1).await();
     }
 }

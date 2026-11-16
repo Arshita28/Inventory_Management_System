@@ -44,6 +44,35 @@ class LocalPreviewServerTest {
     }
 
     @Test
+    void landingAndApplicationRemainSeparateAndVideoSupportsSeeking() throws Exception {
+        var landing = get("/");
+        assertEquals(200, landing.statusCode());
+        assertTrue(landing.body().contains("Login"));
+        assertTrue(landing.body().contains("name='role' value='ADMIN'"));
+        assertTrue(landing.body().contains("How it works"));
+        assertFalse(landing.body().contains(" loop"));
+        assertTrue(landing.headers().firstValue("Content-Security-Policy").orElseThrow().contains("media-src 'self'"));
+        assertTrue(get("/app").body().contains("action='/app'"));
+        assertEquals(200, get("/assets/landing.js").statusCode());
+        assertEquals(200, get("/assets/landing.css").statusCode());
+        assertEquals(200, get("/assets/landing-final.jpg").statusCode());
+        var bytes = client.send(HttpRequest.newBuilder(uri("/assets/landing-intro.mp4"))
+                .header("Range", "bytes=0-31").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(206, bytes.statusCode());
+        assertEquals(32, bytes.body().length);
+        assertEquals("video/mp4", bytes.headers().firstValue("Content-Type").orElseThrow());
+        for (String range : java.util.List.of("bytes=999999999-", "bytes=-0", "bytes=30-2", "bytes=0-1,3-4")) {
+            var invalid = client.send(HttpRequest.newBuilder(uri("/assets/landing-intro.mp4"))
+                    .header("Range", range).GET().build(), HttpResponse.BodyHandlers.discarding());
+            assertEquals(416, invalid.statusCode());
+        }
+        var tail = client.send(HttpRequest.newBuilder(uri("/assets/landing-intro.mp4"))
+                .header("Range", "bytes=-64").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(206, tail.statusCode());
+        assertEquals(64, tail.body().length);
+    }
+
+    @Test
     void previewShowsActualStockAndSelectedProductHistory() throws Exception {
         var response = get("/?sku=VE-CHG-001");
         assertEquals(200, response.statusCode());
@@ -173,10 +202,10 @@ class LocalPreviewServerTest {
     @Test
     void cashierCannotSubmitManagerActions() throws Exception {
         server.close();
-        var cashier = new com.inventory.security.User(UUID.randomUUID(), "cashier", com.inventory.security.Role.CASHIER, true);
+        var cashier = new com.inventory.security.User(UUID.randomUUID(), "cashier", com.inventory.security.Role.STAFF, true);
         server = new LocalPreviewServer(inventory, cashier, 0);
         server.start();
-        String html = get("/").body();
+        String html = get("/app").body();
         assertFalse(html.contains("action='/stock/receive'"));
         assertFalse(html.contains("action='/products/create'"));
         assertTrue(html.contains("action='/stock/sell'"));
@@ -186,7 +215,7 @@ class LocalPreviewServerTest {
     }
 
     private HttpResponse<String> post(String path, Map<String, String> fields) throws Exception {
-        String html = get("/").body();
+        String html = get("/app").body();
         var token = Pattern.compile("name='csrf' value='([^']+)'").matcher(html);
         assertTrue(token.find());
         Map<String, String> data = new HashMap<>(fields);
@@ -224,7 +253,7 @@ class LocalPreviewServerTest {
     @Test
     void legacyRecordsRemainAccessibleOutsideDefaultElectronicsView() throws Exception {
         inventory.addProduct(DemoData.MANAGER, new Product("OLD", "Legacy notebook", "Stationery", BigDecimal.ONE, 0, true));
-        String defaultPage = get("/").body();
+        String defaultPage = get("/app").body();
         assertFalse(defaultPage.contains("Legacy notebook"));
         String legacyPage = get("/?scope=legacy").body();
         assertTrue(legacyPage.contains("Legacy notebook"));
@@ -233,7 +262,7 @@ class LocalPreviewServerTest {
                 "price", "100", "reorderLevel", "2", "capacityGb", "128", "storageInterface", "USB", "supportedDevices", "Laptop"));
         assertEquals(303, response.statusCode());
         assertInstanceOf(com.inventory.model.details.StorageDetails.class, inventory.getStock(DemoData.MANAGER, "OLD").product().details());
-        assertTrue(get("/").body().contains("Converted SSD"));
+        assertTrue(get("/app").body().contains("Converted SSD"));
     }
 
     private HttpResponse<String> rawPost(String path, String body) throws Exception {
@@ -295,7 +324,7 @@ class LocalPreviewServerTest {
         var changed = post("/demo/actor", Map.of("actor", "cashier"));
         assertEquals(303, changed.statusCode());
         assertTrue(changed.headers().firstValue("Set-Cookie").orElseThrow().contains("SameSite=Strict"));
-        var request = HttpRequest.newBuilder(uri("/")).header("Cookie", "demo_actor=cashier").GET().build();
+        var request = HttpRequest.newBuilder(uri("/app")).header("Cookie", "demo_actor=cashier").GET().build();
         String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
         assertTrue(body.contains("Demo identity (not a login)"));
         assertFalse(body.contains("Sales &amp; inventory analytics"));
@@ -306,7 +335,7 @@ class LocalPreviewServerTest {
     void analyticsRejectInvalidDatesAndExplainLimitedHistory() throws Exception {
         assertEquals(400, get("/?from=2026-11-10&to=2026-11-09").statusCode());
         assertEquals(400, get("/?from=not-a-date").statusCode());
-        String page = get("/").body();
+        String page = get("/app").body();
         assertTrue(page.contains("threshold-based fallback"));
         assertTrue(page.contains("not acquisition cost"));
         assertTrue(page.contains("Create purchase order"));

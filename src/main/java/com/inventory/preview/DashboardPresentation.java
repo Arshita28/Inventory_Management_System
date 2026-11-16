@@ -21,7 +21,7 @@ final class DashboardPresentation {
         long inbound = snapshot.orders().stream().filter(value -> value.status() == com.inventory.model.procurement.OrderStatus.APPROVED
                 || value.status() == com.inventory.model.procurement.OrderStatus.PARTIALLY_RECEIVED).mapToLong(value -> value.outstanding()).sum();
         long suppliers = snapshot.offers().stream().map(value -> value.supplierName()).distinct().count();
-        StringBuilder html = new StringBuilder("<div class='hero-sales glass-card'><div class='card-top'><span>Sales activity</span><a href='#analytics' aria-label='View sales analytics'>↗</a></div><div class='sales-number'>")
+        StringBuilder html = new StringBuilder("<div class='hero-sales glass-card'><div class='card-top'><span>Sales activity</span><a href='#analytics' aria-label='View sales analytics'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><div class='sales-number'>")
                 .append(number(report.soldUnits())).append("<span>units sold</span></div><div class='mini-bars' aria-hidden='true'>");
         var daily = report.daily();
         int groups = Math.min(20, daily.size());
@@ -39,12 +39,12 @@ final class DashboardPresentation {
                 .append(value(report.receivedUnits(), "Received units")).append(value(inbound, "Approved inbound"))
                 .append(value(suppliers, "Suppliers")).append("</div><div class='incoming-actions'><div class='period-tabs'>")
                 .append(period("Today", today, today, report)).append(period("Week", today.minusDays(6), today, report))
-                .append(period("Month", today.minusDays(29), today, report)).append("</div><a class='lime-link' href='#purchase-orders'>View orders ↗</a></div></section>")
-                .append("<div class='hero-small-cards'><section class='glass-card availability-card'><div class='card-top'><span>Availability</span><a href='#catalogue' aria-label='View available inventory'>↗</a></div><small>Active products with stock</small><strong>")
+                .append(period("Month", today.minusDays(29), today, report)).append("</div><a class='lime-link' href='#purchase-orders'>View orders " + UiIcons.ARROW_UP_RIGHT + "</a></div></section>")
+                .append("<div class='hero-small-cards'><section class='glass-card availability-card'><div class='card-top'><span>Availability</span><a href='#catalogue' aria-label='View available inventory'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>Active products with stock</small><strong>")
                 .append(active == 0 ? 0 : available * 100 / active).append("%</strong><div class='availability-track'><i style='width:")
                 .append(active == 0 ? 0 : available * 100 / active).append("%'></i></div><small>").append(available).append(" of ").append(active).append(" products</small></section>")
-                .append("<section class='glass-card attention-card'><div class='card-top'><span>Low stock</span><a href='#replenishment' aria-label='Review low-stock products'>↗</a></div><small>At or below reorder level</small><strong>")
-                .append(low).append(low == 1 ? "<span>product</span></strong>" : "<span>products</span></strong>").append("<a class='attention-link' href='#replenishment'>Review &amp; reorder ↗</a></section></div></div>");
+                .append("<section class='glass-card attention-card'><div class='card-top'><span>Low stock</span><a href='#replenishment' aria-label='Review low-stock products'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>At or below reorder level</small><strong>")
+                .append(low).append(low == 1 ? "<span>product</span></strong>" : "<span>products</span></strong>").append("<a class='attention-link' href='#replenishment'>Review &amp; reorder " + UiIcons.ARROW_UP_RIGHT + "</a></section></div></div>");
         return html.toString();
     }
 
@@ -53,17 +53,17 @@ final class DashboardPresentation {
         long active = report.products().stream().filter(value -> value.stock().product().active()).count();
         long healthy = report.products().stream().filter(value -> value.stock().product().active() && !value.stock().isLowStock()).count();
         long health = active == 0 ? 0 : healthy * 100 / active;
-        StringBuilder out = new StringBuilder("<section id='dashboard' class='overview-report'><div class='report-heading'><div><span class='section-kicker'>YOUR OPERATION, AT A GLANCE</span><h2>Inventory report</h2></div><span class='report-range'>")
-                .append(report.from()).append(" — ").append(report.to()).append("<a href='#analytics' aria-label='Change report period'>⌄</a></span></div><div class='report-grid'>")
-                .append("<article class='overview-card'><div class='card-top'><h3>Overview KPI</h3><a href='/export/inventory.csv' aria-label='Export inventory CSV'>↓</a></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
+        StringBuilder out = new StringBuilder("<section id='dashboard' data-view='dashboard' class='overview-report workspace-view'><div class='report-heading'><div><span class='section-kicker'>YOUR OPERATION, AT A GLANCE</span><h2>Inventory report</h2></div><span class='report-range'>")
+                .append(report.from()).append(" — ").append(report.to()).append("<a href='#analytics' aria-label='Change report period'>" + UiIcons.CHEVRON_DOWN + "</a></span></div><div class='report-grid'>")
+                .append("<article class='overview-card'><div class='card-top'><h3>Overview KPI</h3><a href='/export/inventory.csv' aria-label='Export inventory CSV'>" + UiIcons.DOWNLOAD + "</a></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
                 .append("<tr><td>Retail stock value</td><td>").append(decimal(report.currentRetailValue())).append("</td><td class='accent-text'>Current</td></tr>")
                 .append("<tr><td>Units in stock</td><td>").append(number(units)).append("</td><td>On hand</td></tr>")
                 .append("<tr><td>Incoming stock</td><td>").append(number(report.receivedUnits())).append("</td><td>Recorded</td></tr></tbody></table></article>")
-                .append("<article class='overview-card health-card'><div class='card-top'><h3>Stock health</h3><a href='#replenishment' aria-label='Review stock health'>↗</a></div><small>Active products above reorder level</small><div class='health-value'>")
+                .append("<article class='overview-card health-card'><div class='card-top'><h3>Stock health</h3><a href='#replenishment' aria-label='Review stock health'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>Active products above reorder level</small><div class='health-value'>")
                 .append(health).append("<span>%</span></div><div class='health-segments' aria-hidden='true'>");
         for (int index = 0; index < 40; index++) out.append("<i").append(index * 100 < health * 40 ? " class='filled'" : "").append("></i>");
-        out.append("</div><p>").append(healthy).append(" of ").append(active).append(" active products are above their threshold.<br><a href='#replenishment'>Keep your next replenishment moving ↗</a></p></article>")
-                .append("<article class='overview-card distribution-card'><div class='card-top'><h3>Inventory distribution</h3><a href='#catalogue' aria-label='View category inventory'>↗</a></div><small>Units on hand by category</small><div class='distribution-body'><ul class='category-legend'>");
+        out.append("</div><p>").append(healthy).append(" of ").append(active).append(" active products are above their threshold.<br><a href='#replenishment'>Keep your next replenishment moving " + UiIcons.ARROW_UP_RIGHT + "</a></p></article>")
+                .append("<article class='overview-card distribution-card'><div class='card-top'><h3>Inventory distribution</h3><a href='#catalogue' aria-label='View category inventory'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>Units on hand by category</small><div class='distribution-body'><ul class='category-legend'>");
         StringBuilder circles = new StringBuilder();
         double offset = 0;
         int index = 0;
@@ -84,7 +84,7 @@ final class DashboardPresentation {
 
     private static String period(String label, LocalDate from, LocalDate to, AnalyticsReport report) {
         return "<a class='" + (report.from().equals(from) && report.to().equals(to) ? "selected" : "")
-                + "' href='/?from=" + from + "&amp;to=" + to + "#home'>" + label + "</a>";
+                + "' href='/app?from=" + from + "&amp;to=" + to + "#home'>" + label + "</a>";
     }
 
     private static String value(long value, String label) { return "<div><strong>" + number(value) + "</strong><small>" + label + "</small></div>"; }

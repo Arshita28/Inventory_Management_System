@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class InventoryServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-09T08:00:00Z");
     private final User manager = new User(UUID.randomUUID(), "manager", Role.MANAGER, true);
-    private final User cashier = new User(UUID.randomUUID(), "cashier", Role.CASHIER, true);
+    private final User cashier = new User(UUID.randomUUID(), "cashier", Role.STAFF, true);
     private InventoryService inventory;
 
     @BeforeEach

@@ -3,7 +3,7 @@ package com.inventory.security;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Trusted actor supplied by the application boundary; login is a later phase. */
+/** Immutable authenticated identity, also usable as an explicit actor in domain tests. */
 public record User(UUID id, String username, Role role, boolean active) {
     public User {
         Objects.requireNonNull(id);

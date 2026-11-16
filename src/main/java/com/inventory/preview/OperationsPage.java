@@ -33,10 +33,9 @@ final class OperationsPage {
         var report = dashboard.analytics();
         var snapshot = dashboard.snapshot();
         StringBuilder out = new StringBuilder(DashboardPresentation.overview(report, snapshot));
-        out.append("<nav class='workspace-nav'><a href='#analytics'>Analytics</a><a href='#replenishment'>Replenishment</a><a href='#purchase-orders'>Purchase orders</a><a href='#catalogue'>Catalogue</a><a href='#supplier-quotes'>Supplier quotes</a></nav>");
-        out.append("<section id='analytics' class='panel ops-panel'><div class='panel-title'><h2>Sales &amp; inventory analytics</h2><p>Recorded unit movements in ")
+        out.append("<section id='analytics' data-view='analytics' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Sales &amp; inventory analytics</h2><p>Recorded unit movements in ")
                 .append(report.zone()).append(". Current stock value uses today's selling prices, not acquisition cost.</p></div>");
-        out.append("<form class='date-filter' method='get' action='/#analytics'>")
+        out.append("<form class='date-filter' method='get' action='/app#analytics'>")
                 .append(input("From", "from", "date", from.toString(), ""))
                 .append(input("Through", "to", "date", to.toString(), ""))
                 .append("<button type='submit'>Update analytics</button></form><div class='analytics-metrics'>")
@@ -52,7 +51,7 @@ final class OperationsPage {
                     .append(performance.daysCover() == null ? (performance.sold() == 0 ? "No sales in period" : "Insufficient history (<7 days)") : performance.daysCover().toPlainString() + " days")
                     .append("</td></tr>");
         }
-        out.append("</tbody></table></div></section><section id='replenishment' class='panel ops-panel'><div class='panel-title'><h2>Low stock &amp; replenishment</h2><p>Review a suggestion, choose a supplier, and create a purchase draft. An order does not change physical stock until receipt.</p></div><div class='restock-grid'>");
+        out.append("</tbody></table></div></section><section id='replenishment' data-view='replenishment' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Low stock &amp; replenishment</h2><p>Review a suggestion, choose a supplier, and create a purchase draft. An order does not change physical stock until receipt.</p></div><div class='restock-grid'>");
         if (report.restock().isEmpty()) out.append("<p class='empty'>No products need replenishment under this date range and current thresholds.</p>");
         for (var suggestion : report.restock()) out.append(restockCard(suggestion, snapshot, csrf, action.equals("/purchase/create") ? submitted : Map.of()));
         out.append("</div></section>").append(orders(actor, snapshot, query, csrf, submitted, action));
@@ -71,7 +70,7 @@ final class OperationsPage {
         if (open.isPresent()) {
             PurchaseOrder order = open.get();
             out.append("<p class='order-pending'>").append(html(order.number())).append(" · ").append(order.status())
-                    .append(" · ").append(order.outstanding()).append(" units outstanding</p><a class='button' href='/?order=")
+                    .append(" · ").append(order.outstanding()).append(" units outstanding</p><a class='button' href='/app?order=")
                     .append(order.id()).append("#purchase-orders'>Review existing order</a>");
         } else if (suggestion.offer() == null) {
             out.append("<p>No supplier quote is configured.</p><a class='button' href='#supplier-quotes'>Add supplier quote</a>");
@@ -92,9 +91,9 @@ final class OperationsPage {
     }
 
     private String orders(User actor, InventorySnapshot snapshot, Map<String, String> query, String csrf, Map<String, String> submitted, String action) {
-        StringBuilder out = new StringBuilder("<section id='purchase-orders' class='panel ops-panel'><div class='panel-title'><h2>Purchase orders</h2><p>Draft → submit → independent approval → partial or full receipt. All orders are local records; nothing is sent to suppliers.</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
+        StringBuilder out = new StringBuilder("<section id='purchase-orders' data-view='purchase-orders' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Purchase orders</h2><p>Draft → submit → independent approval → partial or full receipt. All orders are local records; nothing is sent to suppliers.</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
         for (var order : snapshot.orders().reversed()) {
-            out.append("<tr><td><a href='/?order=").append(order.id()).append("#purchase-orders'>").append(order.number()).append("</a><small>")
+            out.append("<tr><td><a href='/app?order=").append(order.id()).append("#purchase-orders'>").append(order.number()).append("</a><small>")
                     .append(html(order.sku())).append("</small></td><td>").append(html(order.supplierName())).append("</td><td>").append(order.status())
                     .append("</td><td>").append(order.receivedQuantity()).append(" / ").append(order.quantity()).append("</td><td>")
                     .append(order.totalCost().toPlainString()).append("</td><td>").append(order.expectedOn())
@@ -140,7 +139,7 @@ final class OperationsPage {
     }
 
     private String quotes(InventorySnapshot snapshot, String csrf) {
-        StringBuilder out = new StringBuilder("<section id='supplier-quotes' class='panel ops-panel'><details><summary>Supplier quotes &amp; lead times</summary><p>Quotes are local supplier references. Orders keep a snapshot of the chosen price.</p><div class='table-wrap'><table><thead><tr><th>Product</th><th>Supplier</th><th>Unit cost</th><th>Lead days</th><th>Minimum units</th></tr></thead><tbody>");
+        StringBuilder out = new StringBuilder("<section id='supplier-quotes' data-view='supplier-quotes' class='panel ops-panel workspace-view'><details open><summary>Supplier quotes &amp; lead times</summary><p>Quotes are local supplier references. Orders keep a snapshot of the chosen price.</p><div class='table-wrap'><table><thead><tr><th>Product</th><th>Supplier</th><th>Unit cost</th><th>Lead days</th><th>Minimum units</th></tr></thead><tbody>");
         snapshot.offers().forEach(offer -> out.append("<tr><td>").append(html(offer.sku())).append("</td><td>").append(html(offer.supplierName()))
                 .append("</td><td>").append(offer.unitCost()).append("</td><td>").append(offer.leadDays()).append("</td><td>").append(offer.minimumQuantity()).append("</td></tr>"));
         out.append("</tbody></table></div><form class='quote-form' method='post' action='/suppliers/offers/create'>")

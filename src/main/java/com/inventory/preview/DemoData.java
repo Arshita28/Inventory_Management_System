@@ -20,7 +20,7 @@ import java.util.UUID;
 /** Repeatable VoltEdge fixtures, kept separate from company and project identity. */
 public final class DemoData {
     public static final User MANAGER = new User(id("manager"), "demo-manager", Role.MANAGER, true);
-    public static final User CASHIER = new User(id("cashier"), "demo-cashier", Role.CASHIER, true);
+    public static final User CASHIER = new User(id("cashier"), "demo-cashier", Role.STAFF, true);
     public static final User APPROVER = new User(id("approver"), "demo-approver", Role.MANAGER, true);
 
     private DemoData() { }

@@ -1,4 +1,4 @@
-/* VoltEdge dashboard theme: warm logistics scene, glass hero cards, charcoal reports. */
+/* VoltEdge inventory controls, charcoal reports and lime data visualizations. */
 :root {
     color-scheme:dark;
     --page:#c8b29f;
@@ -21,10 +21,10 @@ html {
 body {
     margin:0;
     color:var(--text);
-    background:radial-gradient(ellipse at 15% 0,#e0d1bf 0,transparent 56%),linear-gradient(125deg,#cbb5a0,#b99e89);
+    background:var(--shell);
     font:14px 'Avenir Next',Avenir,'Segoe UI',sans-serif;
     line-height:1.45;
-    padding:38px 3vw 55px
+    padding:0
 }
 a {
     color:inherit;
@@ -44,13 +44,13 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible,s
     outline-offset:4px
 }
 .app-shell {
-    max-width:1500px;
-    margin:auto;
+    max-width:100%;
+    margin:0;
     background:var(--shell);
-    border:7px solid var(--shell);
-    border-radius:30px;
+    border:0;
+    border-radius:0;
     overflow:clip;
-    box-shadow:0 28px 90px #3e2e232e
+    box-shadow:none
 }
 .hero {
     position:relative;
@@ -58,15 +58,15 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible,s
     min-height:550px;
     overflow:hidden;
     background:#aa8e6c;
-    border-radius:23px 23px 0 0
+    border-radius:0
 }
 .hero:before {
     content:'';
     position:absolute;
     inset:-4px;
     z-index:-2;
-    background:linear-gradient(90deg,#28231875 0,transparent 64%),url('/assets/conveyor-hero.png') center 52%/cover no-repeat;
-    animation:scene-drift 24s ease-in-out infinite alternate
+    background:none;
+    animation:none
 }
 .hero:after {
     content:'';
@@ -460,6 +460,8 @@ h1 {
     font-size:24px
 }
 main {
+    max-width:1500px;
+    margin:0 auto;
     padding:0 14px 10px
 }
 .report-heading {
@@ -1204,9 +1206,6 @@ section[id],aside[id] {
     }
 }
 @media(min-width:1500px) {
-    body {
-        padding-top:50px
-    }
     .hero {
         min-height:590px
     }
@@ -1246,9 +1245,6 @@ section[id],aside[id] {
     }
 }
 @media(max-width:1150px) {
-    body {
-        padding:23px 20px 35px
-    }
     .hero {
         min-height:550px
     }
@@ -1300,15 +1296,7 @@ section[id],aside[id] {
     }
 }
 @media(max-width:800px) {
-    body {
-        padding:13px 12px 30px
-    }
-    .app-shell {
-        border-width:5px;
-        border-radius:25px
-    }
     .hero {
-        border-radius:20px 20px 0 0;
         min-height:650px
     }
     .app-header {

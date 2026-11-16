@@ -6,6 +6,7 @@ import com.inventory.model.StockMovement;
 import com.inventory.model.StockSummary;
 import com.inventory.security.Permission;
 import com.inventory.security.User;
+import com.inventory.security.auth.AccessService;
 import com.inventory.service.InventoryService;
 
 import java.io.IOException;
@@ -22,11 +23,17 @@ import java.util.regex.Pattern;
 /** Server-rendered view. All stock decisions remain in InventoryService. */
 final class InventoryPage {
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{(\\w+)}}");
+    private final AccessService access;
     private final InventoryService inventory;
     private final String template;
     private final OperationsPage operations;
 
     InventoryPage(InventoryService inventory) throws IOException {
+        this(inventory, null);
+    }
+
+    InventoryPage(InventoryService inventory, AccessService access) throws IOException {
+        this.access = access;
         this.inventory = inventory;
         operations = new OperationsPage(inventory.operations());
         try (var input = InventoryPage.class.getResourceAsStream("/inventory.html")) {
@@ -65,15 +72,34 @@ final class InventoryPage {
         values.put("productCount", String.valueOf(all.size()));
         values.put("unitCount", String.valueOf(all.stream().mapToLong(StockSummary::quantity).sum()));
         values.put("lowCount", String.valueOf(all.stream().filter(StockSummary::isLowStock).count()));
-        values.put("role", html(viewer.role().name()));
+        values.put("catalogueActions", viewer.role().allows(Permission.MANAGE_PRODUCTS)
+                ? "<a class='lime-link' href='#add-product'>+ Add product</a>" : "");
+        values.put("stockAlerts", viewer.role().allows(Permission.VIEW_ANALYTICS)
+                ? "<a class='header-icon' href='#replenishment' aria-label='Review stock alerts' title='Stock alerts'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9M9 21h6'/></svg><i></i></a>" : "");
+        values.put("role", html(viewer.role().label()));
+        values.put("accountStatus", access == null ? "LOCAL DEMO" : "SIGNED IN");
+        values.put("identityHelp", access == null ? "Demonstration identity; login is disabled in this test fixture." : "Signed in as " + html(viewer.username()));
+        values.put("logoutControl", access == null ? "" : "<form method='post' action='/auth/logout'><input type='hidden' name='csrf' value='" + html(csrf) + "'><button class='logout-button' type='submit' title='Logout'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M9 4H4v16h5M14 8l4 4-4 4M8 12h10'/></svg><span>Logout</span></button></form>");
+        values.put("accountPanel", access != null && viewer.role().allows(Permission.MANAGE_USERS) ? AccountPage.render(access.users(viewer), csrf) : "");
         values.put("actorControls", demoSwitch ? OperationsPage.demoActors(viewer, csrf) : "");
         var operationsView = operations.render(viewer, query, csrf, submitted, action);
         values.put("operations", operationsView.content());
         values.put("heroWidgets", operationsView.hero().isEmpty()
-                ? "<div class='hero-cashier glass-card'><h2>Inventory workspace</h2><p>View products and record sales from the catalogue.</p><a class='lime-link' href='#catalogue'>Open catalogue ↗</a></div>" : operationsView.hero());
-        values.put("navigation", "<a class='nav-home' href='#home'>Home</a>"
-                + (viewer.role().allows(Permission.VIEW_ANALYTICS) ? "<a class='nav-dashboard' href='#dashboard'>Dashboard</a><a class='nav-analytics' href='#analytics'>Analytics</a>" : "")
-                + "<a class='nav-management' href='#catalogue'>Management</a>");
+                ? "<div class='hero-cashier glass-card'><h2>Inventory workspace</h2><p>View products and record sales from the catalogue.</p><a class='lime-link' href='#catalogue'>Open catalogue " + UiIcons.ARROW_UP_RIGHT + "</a></div>" : operationsView.hero());
+        StringBuilder navigation = new StringBuilder(navItem("home", "Home", "M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9"));
+        if (viewer.role().allows(Permission.VIEW_ANALYTICS)) {
+            navigation.append(navItem("dashboard", "Dashboard", "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"))
+                    .append(navItem("analytics", "Analytics", "M4 3v18h17M8 16v-4M13 16V8M18 16V5"));
+        }
+        navigation.append(navItem("management", "Management", "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"));
+        if (viewer.role().allows(Permission.VIEW_ANALYTICS)) {
+            navigation.append(navItem("replenishment", "Replenishment", "M4 7h14l-4-4M20 17H6l4 4M20 7v5M4 17v-5"))
+                    .append(navItem("purchase-orders", "Purchase orders", "M7 3h10v4H7zM7 5H4v16h16V5h-3M8 12h8M8 16h5"))
+                    .append(navItem("supplier-quotes", "Suppliers", "M3 21V7l6-4 6 4v14M15 10h6v11M7 9h4M7 13h4M7 17h4M3 21h18"));
+        }
+        if (access != null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navItem("users", "People & access", "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M17 4a4 4 0 0 1 0 7M22 21v-2a4 4 0 0 0-3-4"));
+        values.put("navigation", navigation.toString());
+        values.put("initialView", initialView(query, action));
         values.put("rows", productRows(products, query));
         values.put("selectedName", selected == null ? "Select a product" : html(selected.product().name()));
         values.put("selectedSku", selected == null ? "" : html(selected.product().sku()));
@@ -90,6 +116,7 @@ final class InventoryPage {
             case "sold" -> "Stock sale recorded.";
             case "deactivated" -> "Product deactivated. Its movement history is preserved.";
             case "purchase" -> "Purchase order saved. Physical stock changes only when an approved delivery is received.";
+            case "users" -> "Account saved. Changed accounts must log in again.";
             case "quote" -> "Supplier quote saved.";
             default -> "";
         };
@@ -97,6 +124,22 @@ final class InventoryPage {
                 : notice.isEmpty() ? "" : "<div role='status' class='message success'>" + html(notice) + "</div>");
         Matcher matcher = PLACEHOLDER.matcher(template);
         return matcher.replaceAll(match -> Matcher.quoteReplacement(values.getOrDefault(match.group(1), "")));
+    }
+
+    private static String navItem(String target, String label, String icon) {
+        return "<a href='#" + target + "' data-nav='" + target + "' title='" + label
+                + "'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='" + icon + "'/></svg><span>" + label + "</span></a>";
+    }
+
+    private static String initialView(Map<String, String> query, String action) {
+        if (action.startsWith("/users/") || "users".equals(query.get("notice"))) return "users";
+        if (action.equals("/purchase/create")) return "replenishment";
+        if (action.startsWith("/purchase/") || query.containsKey("order") || "purchase".equals(query.get("notice"))) return "purchase-orders";
+        if (action.startsWith("/suppliers/") || "quote".equals(query.get("notice"))) return "supplier-quotes";
+        if (action.startsWith("/products/") || action.startsWith("/stock/") || query.containsKey("notice")
+                || java.util.stream.Stream.of("sku", "q", "scope", "category", "status", "newCategory").anyMatch(query::containsKey)) return "management";
+        if (query.containsKey("from") || query.containsKey("to")) return "analytics";
+        return "home";
     }
 
     private String productRows(List<StockSummary> products, Map<String, String> query) {
@@ -109,7 +152,7 @@ final class InventoryPage {
             Map<String, String> link = new HashMap<>(query);
             link.remove("notice");
             link.put("sku", product.sku());
-            rows.append("<tr><td><a href='/").append(html(queryString(link))).append("'>")
+            rows.append("<tr><td><a href='/app").append(html(queryString(link))).append("'>")
                     .append(html(product.name())).append("</a><small>").append(html(product.sku()))
                     .append("</small><small class='spec-summary'>").append(html(product.details().summary()))
                     .append("</small></td><td>").append(html(product.category()))
@@ -142,7 +185,7 @@ final class InventoryPage {
     }
 
     private String filters(List<StockSummary> all, String search, String category, String status, String scope) {
-        StringBuilder form = new StringBuilder("<form method='get' action='/' class='filters'>");
+        StringBuilder form = new StringBuilder("<form method='get' action='/app' class='filters'>");
         form.append("<input aria-label='Search products' name='q' placeholder='Search name, SKU or specs' maxlength='255' value='")
                 .append(html(search)).append("'><select aria-label='Catalogue view' name='scope'>")
                 .append(option("electronics", "Electronics catalogue", scope)).append(option("legacy", "Legacy records", scope))
@@ -153,7 +196,7 @@ final class InventoryPage {
         form.append("</select><select aria-label='Stock status' name='status'>")
                 .append(option("all", "All products", status)).append(option("low", "Low stock", status))
                 .append(option("active", "Active", status)).append(option("inactive", "Inactive", status));
-        return form.append("</select><button type='submit'>Apply filters</button><a class='button' href='/'>Clear</a></form>").toString();
+        return form.append("</select><button type='submit'>Apply filters</button><a class='button' href='/app'>Clear</a></form>").toString();
     }
 
     private String stockForms(User viewer, StockSummary selected, String csrf,
@@ -242,7 +285,7 @@ final class InventoryPage {
     }
 
     private String categorySelector(String label, String name, ProductCategory selected, StockSummary product, boolean legacy, String anchor) {
-        StringBuilder form = new StringBuilder("<form class='category-picker' method='get' action='/#" + anchor + "'>");
+        StringBuilder form = new StringBuilder("<form class='category-picker' method='get' action='/app#" + anchor + "'>");
         if (product != null) {
             form.append(hidden("sku", product.product().sku()));
         }

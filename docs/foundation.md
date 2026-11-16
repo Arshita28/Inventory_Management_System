@@ -1,3 +1,5 @@
+> Current update: the runtime now requires password login and has persistent Admin/Manager/Staff accounts, session-bound CSRF, session expiry and bottom-left logout. See [authentication](authentication.md). Trusted demo actors described below remain test fixtures or historical foundation notes.
+
 # Foundation: version 0.1
 
 See [VoltEdge electronics domain](electronics-domain.md) for the implemented category classes and legacy migration.
