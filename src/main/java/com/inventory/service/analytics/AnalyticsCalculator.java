@@ -29,7 +29,7 @@ public final class AnalyticsCalculator {
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) daily.put(date, new long[2]);
         var stock = snapshot.stock().stream().filter(value -> value.product().details().category() != ProductCategory.LEGACY).toList();
         var skus = stock.stream().map(value -> value.product().sku()).collect(java.util.stream.Collectors.toSet());
-        snapshot.movements().stream().filter(value -> skus.contains(value.sku()))
+        snapshot.movements().stream().filter(value -> value.type() == MovementType.SALE || value.type() == MovementType.RECEIPT).filter(value -> skus.contains(value.sku()))
                 .filter(value -> !value.occurredAt().isBefore(start) && value.occurredAt().isBefore(end)).forEach(value -> {
                     long units = Math.abs((long) value.quantity());
                     boolean sale = value.type() == MovementType.SALE;

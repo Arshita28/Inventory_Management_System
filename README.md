@@ -6,9 +6,25 @@ A Java desktop application for managing inventory, sales, purchasing, suppliers,
 
 > **Project status:** Java foundation with JDBC persistence and a working localhost demo implemented (0.1). Product creation/editing/deactivation, service-level permissions, stock receipts and sales, low-stock detection, immutable movement history, and request retry protection work with both in-memory and H2 repositories. Six electronics detail classes implement `ProductDetails` with category-specific validation and JDBC persistence. The localhost workspace also supports search, category/status filters, category-specific forms, legacy-record views, CSV export, date-filtered analytics, supplier quotes, purchase orders, independent approvals, partial receipts, and purchase event history. The remaining sections describe the full roadmap unless explicitly marked implemented. See [foundation details](docs/foundation.md).
 
+## Retail workspace update
+
+Customer invoices with multiple products, invoice discounts and printing; linked
+resellable/damaged returns; independently approved stock counts; supplier contacts and quote editing; purchase documents with
+multiple products; Admin backup download with offline restore
+are implemented. The workspace retains its charcoal-and-lime theme with compact
+navigation, tables and forms. See [the walkthrough and current limits](docs/retail-workflows.md).
+
+## PostgreSQL deployment support
+
+The Java backend can connect to managed PostgreSQL through environment variables,
+with a shared connection pool, verified TLS, transactional schema migrations and
+an explicit read-only H2 importer. H2 remains the local-development default. See
+[PostgreSQL configuration, migration and deployment](docs/postgresql-deployment.md).
+A cloud instance has not been provisioned or connected automatically.
+
 ## Run the current foundation
 
-Prerequisites: JDK 21 and Maven 3.9 or later. H2 is bundled into the executable JAR; no database server is needed for this version.
+Prerequisites: JDK 21 and Maven 3.9 or later. H2 and the PostgreSQL driver are bundled into the executable JAR; no database server is needed for local H2 mode.
 
 ```sh
 mvn clean verify
@@ -35,7 +51,7 @@ The workspace supports product management, stock receipts/sales, movement histor
 - Omit `--seed-demo` to leave existing data unchanged or start with an empty database.
 - `--serve` defaults to port 8080; use `--port=8081` if 8080 is occupied.
 - Stop the server with Ctrl+C. Restarting preserves products, history, and retry protection.
-- The server listens only on `127.0.0.1`. Only one application process should open this H2 file at a time.
+- Local mode listens only on `127.0.0.1`. Hosted binding and HTTPS origin are explicitly configured through environment variables. Only one application process should open an H2 file at a time.
 - Read endpoints: `/` (landing), `/app` (workspace), `/app?sku=VE-CHG-001`, `/api/inventory`, `/export/inventory.csv`, and `/health`. Writes use validated POST forms with a form token and request IDs for stock changes.
 
 Electronics appear by default. Use **Catalogue view → Legacy records** to inspect older products. The additive V002 migration preserves their original data. Choose a product category and click **Show category fields** before entering a new product; the form then shows that category’s specifications.
@@ -55,7 +71,7 @@ Use **Replenishment** to review a low-stock suggestion and its calculation. Add 
 
 Password login replaces demo identity switching in the runnable server. Orders and supplier quotes are local records; no supplier messages or payments occur. See the [implementation and verification plan](docs/analytics-procurement-plan.md) for calculations and limits.
 
-The original console demo remains in-memory; only `--serve` uses persistent storage. MySQL integration is planned and has not been tested or implemented.
+The original console demo remains in-memory; only `--serve` uses persistent storage. Managed PostgreSQL support is implemented; see the deployment guide above. MySQL is not implemented.
 
 The local dashboard now follows the supplied conveyor-and-charcoal visual reference. See [design reference and generated asset prompt](docs/design-reference.md).
 
@@ -76,7 +92,7 @@ See [reference systems and workflow mapping](docs/references.md) for how ERPNext
 | Language | Java 21 | Application code and business logic |
 | Desktop interface | Java Swing | Forms, tables, dashboards, and dialogs |
 | Build tool | Maven | Dependencies, compilation, and tests |
-| Database | H2 implemented locally; MySQL planned | Persistent, relational business data |
+| Database | H2 locally; PostgreSQL for hosted deployment | Persistent, relational business data |
 | Database access | JDBC with prepared statements | Explicit SQL and transaction handling |
 | Testing | JUnit 5 | Business-rule and integration verification |
 | Logging | Java logging API | Application diagnostics |
@@ -256,7 +272,7 @@ Swing UI -> Application services -> Domain models and policies
                        |
                  Repository interfaces
                        |
-                JDBC implementations -> H2 now / MySQL planned
+                JDBC implementations -> H2 locally / PostgreSQL when configured
 ```
 
 ```text
@@ -292,7 +308,7 @@ inventory-management-system/
     └── repository/
 ```
 
-This is the target structure. The current implementation contains `App`, models, security, services, exceptions, in-memory and JDBC repositories, a local browser adapter in the `preview` package, and unit/integration tests. The implemented H2 schema is at `src/main/resources/database/schema-h2.sql`. The full MySQL schema and UI packages will be added later. Create packages as they become necessary rather than filling them with empty classes.
+This is the target structure. The current implementation contains `App`, models, security, services, exceptions, in-memory and JDBC repositories, a local browser adapter in the `preview` package, and unit/integration tests. The implemented H2 schema is at `src/main/resources/database/schema-h2.sql`. PostgreSQL schema migrations are in `src/main/resources/database/postgresql`. Create packages as they become necessary rather than filling them with empty classes.
 
 ### Responsibility rules
 
@@ -376,7 +392,7 @@ Complete one working vertical flow before expanding screens. Build a small inter
 ## 11. Verification plan
 
 - Unit tests for reorder calculations, discount boundaries, permission checks, expiry allocation, and workflow transitions.
-- Integration tests against an isolated MySQL test database for rollback, constraints, receipt limits, and concurrent stock changes.
+- Integration tests against an isolated PostgreSQL test database for rollback, constraints, receipt limits, and concurrent stock changes.
 - Verify that two simultaneous sales cannot consume the same final unit.
 - Verify rejection of self-approval, duplicate reversal, excessive returns, and invalid CSV rows.
 - Verify stock balances and report totals against a small, hand-calculated dataset.
@@ -398,7 +414,7 @@ Test business outcomes and failure paths rather than getters, setters, or code t
 
 ## 13. Local setup status
 
-The current runnable foundation requires JDK 21 and Maven 3.9 or later; use the commands near the top of this README. H2 provides embedded storage and JUnit provides tests. The executable JAR bundles H2. Local preview storage uses H2's local `sa` account with no password and is never exposed as a database server. MySQL setup and credential configuration will be added with that integration. Password authentication, role-based sessions and account administration are implemented. Complete invoices and batches remain planned. Purchase approvals use the logged-in account.
+The current runnable foundation requires JDK 21 and Maven 3.9 or later; use the commands near the top of this README. H2 provides embedded storage and JUnit provides tests. The executable JAR bundles H2. Local preview storage uses H2's local `sa` account with no password and is never exposed as a database server. Managed PostgreSQL connection settings and migration instructions are in `docs/postgresql-deployment.md`. Password authentication, role-based sessions and account administration are implemented. Multi-product invoices are implemented; batch allocation remains planned. Purchase approvals use the logged-in account.
 
 ## 14. Future extensions
 

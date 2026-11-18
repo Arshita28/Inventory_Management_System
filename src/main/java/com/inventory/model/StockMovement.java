@@ -16,7 +16,7 @@ public record StockMovement(UUID id, String sku, MovementType type, int quantity
         if (quantity == 0 || balanceAfter < 0) {
             throw new IllegalArgumentException("Movement quantity and balance are invalid");
         }
-        if ((type == MovementType.RECEIPT && quantity < 0)
+        if (((type == MovementType.RECEIPT || type == MovementType.RETURN) && quantity < 0)
                 || (type == MovementType.SALE && quantity > 0)) {
             throw new IllegalArgumentException("Quantity direction must match movement type");
         }

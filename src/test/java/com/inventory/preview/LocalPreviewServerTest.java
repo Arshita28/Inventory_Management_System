@@ -79,7 +79,7 @@ class LocalPreviewServerTest {
         assertTrue(response.body().contains("65W USB-C fast charger"));
         assertTrue(response.body().contains("Demo: counter sale"));
         assertTrue(response.body().contains("Balance 4"));
-        assertTrue(response.body().contains("Local working demo"));
+        assertTrue(response.body().contains("Quick actions"));
         assertTrue(response.headers().firstValue("Content-Type").orElseThrow().contains("text/html"));
     }
 

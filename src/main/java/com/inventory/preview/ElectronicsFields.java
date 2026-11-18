@@ -38,8 +38,7 @@ final class ElectronicsFields {
     }
 
     private static String number(String label, String key, Map<String, String> fields, int minimum) {
-        return "<label>" + label + "<input required type='number' name='" + key + "' min='" + minimum
-                + "' max='2147483647' step='1' value='" + InventoryPage.html(fields.getOrDefault(key, minimum == 0 ? "0" : "")) + "'></label>";
+        return NumericFields.render(label,key,fields.getOrDefault(key,minimum==0?"0":""),"min='"+minimum+"' max='2147483647' step='1'");
     }
 
     private static String select(String label, String key, Map<String, String> fields, String... options) {

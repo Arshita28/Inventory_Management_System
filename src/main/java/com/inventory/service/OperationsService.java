@@ -62,6 +62,25 @@ public final class OperationsService {
         return repository.createOrder(PurchaseOrder.draft(requestId, offer, quantity, actor.id(), clock.instant(), today().plusDays(offer.leadDays()), note));
     }
 
+    public void createBatch(User actor,UUID group,java.util.List<UUID> offers,java.util.List<Integer> quantities,String note) {
+        authorization.require(actor,Permission.MANAGE_PURCHASES);
+        if(!(repository instanceof com.inventory.repository.jdbc.JdbcInventoryRepository jdbc)) throw new IllegalArgumentException("Persistent storage required");
+        var snapshot=repository.snapshot();
+        java.util.List<PurchaseOrder> drafts=new java.util.ArrayList<>();
+        for(int i=0;i<offers.size();i++) {
+            UUID offerId=offers.get(i);
+            var offer=snapshot.offers().stream().filter(o->o.id().equals(offerId)).findFirst().orElseThrow(()->new InventoryException("Unknown supplier quote"));
+            UUID lineId=UUID.nameUUIDFromBytes((group+":"+i).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            drafts.add(PurchaseOrder.draft(lineId,offer,quantities.get(i),actor.id(),clock.instant(),today().plusDays(offer.leadDays()),note));
+        }
+        jdbc.createOrderBatch(group,drafts);
+    }
+    public void transitionBatch(User actor,UUID group,OrderAction action,String note) {
+        authorization.require(actor,action==OrderAction.APPROVE || action==OrderAction.REJECT?Permission.APPROVE_PURCHASES:Permission.MANAGE_PURCHASES);
+        if(!(repository instanceof com.inventory.repository.jdbc.JdbcInventoryRepository jdbc)) throw new IllegalArgumentException("Persistent storage required");
+        jdbc.transitionBatch(group,action,actor.id(),note,clock.instant());
+    }
+
     public PurchaseOrder transition(User actor, UUID orderId, OrderAction action, String note) {
         authorization.require(actor, action == OrderAction.APPROVE || action == OrderAction.REJECT
                 ? Permission.APPROVE_PURCHASES : Permission.MANAGE_PURCHASES);

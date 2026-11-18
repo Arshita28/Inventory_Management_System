@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+data
+target
+docs
+.tools
+application.local.properties
+*.log

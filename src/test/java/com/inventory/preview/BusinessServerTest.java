@@ -1,0 +1,83 @@
+package com.inventory.preview;
+
+import com.inventory.model.Product;
+import com.inventory.model.details.ChargingDetails;
+import com.inventory.repository.jdbc.JdbcInventoryRepository;
+import com.inventory.security.*;
+import com.inventory.service.InventoryService;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import java.math.BigDecimal;
+import java.net.*;
+import java.net.http.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.util.*;
+import java.util.regex.Pattern;
+import static org.junit.jupiter.api.Assertions.*;
+
+class BusinessServerTest {
+    @TempDir Path temp;
+    LocalPreviewServer server;
+    InventoryService inventory;
+    HttpClient client;
+    User manager=new User(UUID.randomUUID(),"manager",Role.MANAGER,true);
+    @BeforeEach void setup() throws Exception {
+        inventory=new InventoryService(new JdbcInventoryRepository("jdbc:h2:file:"+temp.resolve("inventory")),new AuthorizationService(),Clock.systemUTC());
+        inventory.addProduct(manager,new Product("A","USB charger",new BigDecimal("100"),2,true,new ChargingDetails("USB-C",20,"USB PD")));
+        inventory.receiveStock(manager,UUID.randomUUID(),"A",10,"Opening");
+        client=HttpClient.newHttpClient();server=new LocalPreviewServer(inventory,manager,0);server.start();
+    }
+    @AfterEach void close(){server.close();client.close();}
+    HttpResponse<String> get(String path)throws Exception {return client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+server.port()+path)).GET().build(),HttpResponse.BodyHandlers.ofString());}
+    HttpResponse<String> post(String path,Map<String,String> fields)throws Exception {
+        String body=fields.entrySet().stream().map(e->URLEncoder.encode(e.getKey(),StandardCharsets.UTF_8)+"="+URLEncoder.encode(e.getValue(),StandardCharsets.UTF_8)).collect(java.util.stream.Collectors.joining("&"));
+        return client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+server.port()+path)).header("Content-Type","application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString());
+    }
+    String csrf()throws Exception {var m=Pattern.compile("name='csrf' value='([^']+)'").matcher(get("/app").body());assertTrue(m.find());return m.group(1);}
+    @Test void invoiceFormsSaveAndErrorsPreserveEnteredLines()throws Exception {
+        String initial=get("/app").body();
+        assertFalse(initial.contains("data-nav='serials'"));
+        assertFalse(initial.contains("name='serials0'"));
+        assertTrue(initial.contains("data-value-type='integer'"));
+        String token=csrf();UUID id=UUID.randomUUID();
+        var fields=new HashMap<>(Map.of("csrf",token,"requestId",id.toString(),"customer","Buyer <One>","discount","0","sku0","A","qty0","11","serials0",""));
+        var rejected=post("/business/checkout",fields);assertEquals(409,rejected.statusCode());
+        assertTrue(rejected.body().contains("Buyer &lt;One&gt;"));assertTrue(rejected.body().contains("value='11'"));
+        assertTrue(rejected.body().contains("data-initial-view=\"sales\""));
+        fields.put("qty0","2");assertEquals(303,post("/business/checkout",fields).statusCode());
+        var invoice=get("/app?invoice="+id);assertEquals(200,invoice.statusCode());assertTrue(invoice.body().contains("INV-000001"));assertTrue(invoice.body().contains("200.00"));
+        assertEquals(8,inventory.getStock(manager,"A").quantity());
+    }
+    @Test void javaRejectsInvalidIntegerAndMoneyInputWithoutChangingStock() throws Exception {
+        String token=csrf();
+        for(String invalid:List.of("1.5","3e2","abc","-1","2147483648")) {
+            var response=post("/business/count",Map.of("csrf",token,"requestId",UUID.randomUUID().toString(),"sku","A","counted",invalid,"reason","Test count"));
+            assertEquals(422,response.statusCode());
+            assertTrue(response.body().contains("whole number") || response.body().contains("2,147,483,647"));
+        }
+        for(String invalid:List.of("1.234","1e2","free")) {
+            assertEquals(422,post("/business/checkout",Map.of("csrf",token,"requestId",UUID.randomUUID().toString(),"customer","Buyer","discount",invalid,"sku0","A","qty0","1")).statusCode());
+        }
+        assertEquals(10,inventory.getStock(manager,"A").quantity());
+        assertTrue(inventory.business().counts(manager).isEmpty());
+        assertTrue(inventory.business().invoices(manager).isEmpty());
+        assertEquals(405,post("/business/serial",Map.of("csrf",token)).statusCode());
+        assertEquals(404,get("/business/serial").statusCode());
+    }
+    @Test void staffCannotAccessBackupOrWriteManagementWorkflows()throws Exception {
+        server.close();server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"staff",Role.STAFF,true),0);server.start();
+        String page=get("/app").body();assertTrue(page.contains("data-nav='sales'"));assertFalse(page.contains("data-nav='stocktaking'"));assertFalse(page.contains("data-nav='backup'"));
+        assertEquals(403,get("/export/backup.sql").statusCode());
+        assertEquals(403,post("/business/count",Map.of("csrf",csrf(),"requestId",UUID.randomUUID().toString(),"sku","A","counted","1","reason","Count")).statusCode());
+        assertEquals(403,post("/business/checkout",Map.of("csrf","invalid")).statusCode());
+    }
+    @Test void removedBarcodeRoutesAndBackupDownloadWork()throws Exception {
+        assertEquals(404,get("/lookup?code=987654").statusCode());
+        assertEquals(405,post("/business/barcode",Map.of("csrf",csrf())).statusCode());
+        assertFalse(get("/app").body().contains("barcode-settings"));
+        server.close();server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"admin",Role.ADMIN,true),0);server.start();
+        var backup=get("/export/backup.sql");assertEquals(200,backup.statusCode());assertTrue(backup.body().contains("PRODUCTS"));assertTrue(backup.headers().firstValue("Content-Disposition").orElseThrow().contains("attachment"));
+    }
+}

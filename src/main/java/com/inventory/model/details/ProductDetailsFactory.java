@@ -27,7 +27,7 @@ public final class ProductDetailsFactory {
     }
 
     private static int number(Map<String, String> fields, String name) {
-        return Integer.parseInt(text(fields, name));
+        return com.inventory.validation.FieldTypes.integer(text(fields,name),com.inventory.validation.FieldTypes.label(name));
     }
 
     private static boolean bool(Map<String, String> fields, String name) {

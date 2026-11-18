@@ -9,3 +9,6 @@
 .env
 application.local.properties
 /data/
+
+__pycache__/
+*.pyc

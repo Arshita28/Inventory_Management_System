@@ -53,16 +53,16 @@ final class DashboardPresentation {
         long active = report.products().stream().filter(value -> value.stock().product().active()).count();
         long healthy = report.products().stream().filter(value -> value.stock().product().active() && !value.stock().isLowStock()).count();
         long health = active == 0 ? 0 : healthy * 100 / active;
-        StringBuilder out = new StringBuilder("<section id='dashboard' data-view='dashboard' class='overview-report workspace-view'><div class='report-heading'><div><span class='section-kicker'>YOUR OPERATION, AT A GLANCE</span><h2>Inventory report</h2></div><span class='report-range'>")
+        StringBuilder out = new StringBuilder("<section id='dashboard' data-view='dashboard' class='overview-report workspace-view'><div class='report-heading'><div><span class='section-kicker'>REPORTS</span><h2>Inventory report</h2></div><span class='report-range'>")
                 .append(report.from()).append(" — ").append(report.to()).append("<a href='#analytics' aria-label='Change report period'>" + UiIcons.CHEVRON_DOWN + "</a></span></div><div class='report-grid'>")
-                .append("<article class='overview-card'><div class='card-top'><h3>Overview KPI</h3><a href='/export/inventory.csv' aria-label='Export inventory CSV'>" + UiIcons.DOWNLOAD + "</a></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
+                .append("<article class='overview-card'><div class='card-top'><h3>Key figures</h3><a href='/export/inventory.csv' aria-label='Export inventory CSV'>" + UiIcons.DOWNLOAD + "</a></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
                 .append("<tr><td>Retail stock value</td><td>").append(decimal(report.currentRetailValue())).append("</td><td class='accent-text'>Current</td></tr>")
                 .append("<tr><td>Units in stock</td><td>").append(number(units)).append("</td><td>On hand</td></tr>")
                 .append("<tr><td>Incoming stock</td><td>").append(number(report.receivedUnits())).append("</td><td>Recorded</td></tr></tbody></table></article>")
                 .append("<article class='overview-card health-card'><div class='card-top'><h3>Stock health</h3><a href='#replenishment' aria-label='Review stock health'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>Active products above reorder level</small><div class='health-value'>")
                 .append(health).append("<span>%</span></div><div class='health-segments' aria-hidden='true'>");
         for (int index = 0; index < 40; index++) out.append("<i").append(index * 100 < health * 40 ? " class='filled'" : "").append("></i>");
-        out.append("</div><p>").append(healthy).append(" of ").append(active).append(" active products are above their threshold.<br><a href='#replenishment'>Keep your next replenishment moving " + UiIcons.ARROW_UP_RIGHT + "</a></p></article>")
+        out.append("</div><p>").append(healthy).append(" of ").append(active).append(" active products are above their threshold.<br><a href='#replenishment'>Review replenishment " + UiIcons.ARROW_UP_RIGHT + "</a></p></article>")
                 .append("<article class='overview-card distribution-card'><div class='card-top'><h3>Inventory distribution</h3><a href='#catalogue' aria-label='View category inventory'>" + UiIcons.ARROW_UP_RIGHT + "</a></div><small>Units on hand by category</small><div class='distribution-body'><ul class='category-legend'>");
         StringBuilder circles = new StringBuilder();
         double offset = 0;
@@ -77,9 +77,16 @@ final class DashboardPresentation {
                     color, percent, 100 - percent, -offset));
             offset += percent;
         }
-        return out.append("</ul><div class='donut'><svg viewBox='0 0 120 120' aria-hidden='true'>")
+        out.append("</ul><div class='donut'><svg viewBox='0 0 120 120' aria-hidden='true'>")
                 .append("<circle cx='60' cy='60' r='51' fill='none' stroke='#41423b' stroke-width='8'/><g transform='rotate(-90 60 60)'>")
-                .append(circles).append("</g></svg><div><strong>").append(number(units)).append("</strong><small>Units total</small></div></div></div></article></div></section>").toString();
+                .append(circles).append("</g></svg><div><strong>").append(number(units)).append("</strong><small>Units total</small></div></div></div></article></div>");
+        out.append("<section class='dashboard-stock-table panel'><div class='panel-title'><h2>Current stock</h2><p>Product quantities and reorder thresholds.</p></div><div class='table-wrap'><table><thead><tr><th>Product</th><th>SKU</th><th>On hand</th><th>Reorder level</th><th>Status</th></tr></thead><tbody>");
+        for(var performance:report.products()) {
+            var stock=performance.stock();var product=stock.product();
+            out.append("<tr><td><a href='/app?sku=").append(InventoryPage.url(product.sku())).append("#management'>").append(InventoryPage.html(product.name())).append("</a></td><td>").append(InventoryPage.html(product.sku())).append("</td><td>").append(stock.quantity()).append("</td><td>").append(product.reorderLevel()).append("</td><td><span class='badge ").append(stock.isLowStock()?"warning":"good").append("'>").append(!product.active()?"Inactive":stock.quantity()==0?"Out of stock":stock.isLowStock()?"Low stock":"In stock").append("</span></td></tr>");
+        }
+        out.append("</tbody></table></div></section></section>");
+        return out.toString();
     }
 
     private static String period(String label, LocalDate from, LocalDate to, AnalyticsReport report) {

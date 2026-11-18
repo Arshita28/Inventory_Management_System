@@ -35,7 +35,7 @@ final class InventoryPage {
     InventoryPage(InventoryService inventory, AccessService access) throws IOException {
         this.access = access;
         this.inventory = inventory;
-        operations = new OperationsPage(inventory.operations());
+        operations = new OperationsPage(inventory.operations(),inventory.business());
         try (var input = InventoryPage.class.getResourceAsStream("/inventory.html")) {
             if (input == null) {
                 throw new IOException("Inventory page template is missing");
@@ -84,20 +84,26 @@ final class InventoryPage {
         values.put("actorControls", demoSwitch ? OperationsPage.demoActors(viewer, csrf) : "");
         var operationsView = operations.render(viewer, query, csrf, submitted, action);
         values.put("operations", operationsView.content());
-        values.put("heroWidgets", operationsView.hero().isEmpty()
-                ? "<div class='hero-cashier glass-card'><h2>Inventory workspace</h2><p>View products and record sales from the catalogue.</p><a class='lime-link' href='#catalogue'>Open catalogue " + UiIcons.ARROW_UP_RIGHT + "</a></div>" : operationsView.hero());
-        StringBuilder navigation = new StringBuilder(navItem("home", "Home", "M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9"));
-        if (viewer.role().allows(Permission.VIEW_ANALYTICS)) {
-            navigation.append(navItem("dashboard", "Dashboard", "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"))
-                    .append(navItem("analytics", "Analytics", "M4 3v18h17M8 16v-4M13 16V8M18 16V5"));
+        values.put("business", new BusinessPage(inventory).render(viewer, csrf, query, submitted, action));
+        if(!viewer.role().allows(Permission.VIEW_ANALYTICS)) values.put("operations","<section class='workspace-view panel staff-dashboard' id='dashboard' data-view='dashboard'><div class='panel-title'><h1>Dashboard</h1><p>Manage stock availability and record customer sales.</p></div><div class='staff-actions'><a class='button' href='#management'>View inventory</a>"+(inventory.business()!=null?"<a class='button' href='#sales'>New sale</a>":"")+"</div></section>");
+        String box="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10";
+        String order="M7 3h10v4H7zM7 5H4v16h16V5h-3M8 12h8M8 16h5";
+        StringBuilder navigation=new StringBuilder(navItem("dashboard","Dashboard","M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"));
+        String inventoryLinks=navItem("management","Product catalogue",box);
+        if(viewer.role().allows(Permission.MANAGE_PRODUCTS)) inventoryLinks+=navItem("add-product","Add product",box)+(inventory.business()!=null?navItem("stocktaking","Stocktaking",order):"");
+        navigation.append(navGroup("Inventory",box,inventoryLinks));
+        if(inventory.business()!=null) navigation.append(navGroup("Sales","M3 4h3l3 12h10l2-8H7M10 21h.01M18 21h.01",navItem("sales","Invoices & returns",order)+navItem("new-sale","New sale",order)));
+        if(viewer.role().allows(Permission.VIEW_ANALYTICS)) {
+            String purchases=(inventory.business()!=null?navItem("purchase-batches","Purchase orders",order):"")+navItem("purchase-orders","Approvals & deliveries",order)+navItem("replenishment","Replenishment",box);
+            navigation.append(navGroup("Purchasing",order,purchases));
+            navigation.append(navGroup("Suppliers","M3 21V7l9-4 9 4v14M7 10h10M7 15h10",(inventory.business()!=null?navItem("supplier-directory","Supplier directory",box):"")+navItem("supplier-quotes","Supplier quotes",order)));
+            navigation.append(navGroup("Reports","M4 3v18h17M8 16v-4M13 16V8M18 16V5",navItem("analytics","Sales & inventory",order)));
         }
-        navigation.append(navItem("management", "Management", "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"));
-        if (viewer.role().allows(Permission.VIEW_ANALYTICS)) {
-            navigation.append(navItem("replenishment", "Replenishment", "M4 7h14l-4-4M20 17H6l4 4M20 7v5M4 17v-5"))
-                    .append(navItem("purchase-orders", "Purchase orders", "M7 3h10v4H7zM7 5H4v16h16V5h-3M8 12h8M8 16h5"))
-                    .append(navItem("supplier-quotes", "Suppliers", "M3 21V7l6-4 6 4v14M15 10h6v11M7 9h4M7 13h4M7 17h4M3 21h18"));
-        }
-        if (access != null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navItem("users", "People & access", "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M17 4a4 4 0 0 1 0 7M22 21v-2a4 4 0 0 0-3-4"));
+        if(access!=null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navItem("users","Staff & access","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8"));
+        if(inventory.business()!=null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navGroup("Settings","M4 4h16v16H4zM8 4v6h8V4M8 20v-6h8v6",navItem("backup","Backup & recovery",order)));
+        navigation.append(navItem("help","Help & guide","M9 9a3 3 0 1 1 6 0c0 2-3 2-3 4M12 17h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20"));
+        values.put("accountName",html(viewer.username()));
+        values.put("accountInitials",html(viewer.username().substring(viewer.username().lastIndexOf('.')+1).substring(0,Math.min(2,viewer.username().length()-viewer.username().lastIndexOf('.')-1)).toUpperCase(Locale.ROOT)));
         values.put("navigation", navigation.toString());
         values.put("initialView", initialView(query, action));
         values.put("rows", productRows(products, query));
@@ -110,6 +116,9 @@ final class InventoryPage {
         values.put("stockForms", stockForms(viewer, selected, csrf, submitted, action));
         values.put("productForms", productForms(viewer, selected, csrf, submitted, action, query));
         String notice = switch (query.getOrDefault("notice", "")) {
+            case "saved" -> "Record saved.";
+            case "invoice" -> "Invoice saved.";
+            case "return" -> "Return recorded.";
             case "created" -> "Product created. Receive stock to set its opening quantity.";
             case "updated" -> "Product details updated. Stock and movement history are unchanged.";
             case "received" -> "Stock receipt recorded.";
@@ -126,12 +135,20 @@ final class InventoryPage {
         return matcher.replaceAll(match -> Matcher.quoteReplacement(values.getOrDefault(match.group(1), "")));
     }
 
+    private static String navGroup(String title,String icon,String links) {
+        return "<details class='nav-group'><summary><svg viewBox='0 0 24 24' aria-hidden='true'><path d='"+icon+"'/></svg><span>"+title+"</span><svg class='nav-chevron' viewBox='0 0 16 16' aria-hidden='true'><path d='m5 6 3 3 3-3'/></svg></summary><div class='nav-submenu'>"+links+"</div></details>";
+    }
+
     private static String navItem(String target, String label, String icon) {
         return "<a href='#" + target + "' data-nav='" + target + "' title='" + label
                 + "'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='" + icon + "'/></svg><span>" + label + "</span></a>";
     }
 
     private static String initialView(Map<String, String> query, String action) {
+        if(action.startsWith("/business/purchase")) return "purchase-batches";
+        if(action.startsWith("/business/count")) return "stocktaking";
+        if(action.equals("/business/checkout") || action.equals("/business/return") || query.containsKey("invoice")) return "sales";
+        if(action.equals("/business/supplier") || action.equals("/business/quote")) return "supplier-directory";
         if (action.startsWith("/users/") || "users".equals(query.get("notice"))) return "users";
         if (action.equals("/purchase/create")) return "replenishment";
         if (action.startsWith("/purchase/") || query.containsKey("order") || "purchase".equals(query.get("notice"))) return "purchase-orders";
@@ -139,7 +156,7 @@ final class InventoryPage {
         if (action.startsWith("/products/") || action.startsWith("/stock/") || query.containsKey("notice")
                 || java.util.stream.Stream.of("sku", "q", "scope", "category", "status", "newCategory").anyMatch(query::containsKey)) return "management";
         if (query.containsKey("from") || query.containsKey("to")) return "analytics";
-        return "home";
+        return "dashboard";
     }
 
     private String productRows(List<StockSummary> products, Map<String, String> query) {
@@ -173,7 +190,7 @@ final class InventoryPage {
         if (selected != null) {
             for (StockMovement movement : inventory.history(viewer, selected.product().sku()).reversed()) {
                 history.append("<li><div class='event-head'><strong>")
-                        .append(movement.quantity() > 0 ? "Stock received" : "Stock sold")
+                        .append(switch(movement.type()) { case RECEIPT -> "Stock received"; case SALE -> "Stock sold"; case RETURN -> "Customer return"; case ADJUSTMENT -> "Stock adjustment"; })
                         .append("</strong><span class='").append(movement.quantity() > 0 ? "positive" : "negative")
                         .append("'>").append(movement.quantity() > 0 ? "+" : "").append(movement.quantity())
                         .append("</span></div><p>").append(html(movement.reason())).append("</p><small>")
@@ -212,7 +229,7 @@ final class InventoryPage {
             }
             String path = "/stock/" + operation;
             Map<String, String> fields = path.equals(action) ? submitted : Map.of();
-            String label = operation.equals("receive") ? "Receive stock" : "Record sale";
+            String label = operation.equals("receive") ? "Receive stock" : "Quick stock sale";
             forms.append("<details ").append(path.equals(action) ? "open" : "").append("><summary>").append(label)
                     .append("</summary><form method='post' action='").append(path).append("'>")
                     .append(hidden("csrf", csrf)).append(hidden("sku", selected.product().sku()))
@@ -221,7 +238,7 @@ final class InventoryPage {
                     .append(input(label + " reason", "reason", "text", fields.getOrDefault("reason", ""), "maxlength='2000'"))
                     .append("<button type='submit'>").append(label).append("</button></form></details>");
         }
-        return forms.append("<p class='muted'>Stock changes are recorded immediately. Sales here track quantities, not full invoices.</p></div>").toString();
+        return forms.append("<p class='muted'>Stock changes are recorded immediately. Use Sales &amp; returns for customer invoices.</p></div>").toString();
     }
 
     private String productForms(User viewer, StockSummary selected, String csrf,
@@ -312,6 +329,7 @@ final class InventoryPage {
     }
 
     private String input(String label, String name, String type, String value, String attributes) {
+        if(type.equals("number")) return NumericFields.render(label,name,value,attributes);
         return "<label>" + label + "<input required name='" + name + "' type='" + type + "' value='" + html(value) + "' " + attributes + "></label>";
     }
 

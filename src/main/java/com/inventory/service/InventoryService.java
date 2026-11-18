@@ -31,6 +31,14 @@ public final class InventoryService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    public String storageLabel() {return repository instanceof com.inventory.repository.jdbc.JdbcInventoryRepository jdbc?jdbc.database().label():"Memory";}
+    public boolean ready() {return !(repository instanceof com.inventory.repository.jdbc.JdbcInventoryRepository jdbc) || jdbc.database().ready();}
+
+    public BusinessService business() {
+        return repository instanceof com.inventory.repository.jdbc.JdbcInventoryRepository jdbc
+                ? new BusinessService(jdbc.database(), authorization, clock) : null;
+    }
+
     public OperationsService operations() {
         return new OperationsService(repository, authorization, clock, java.time.ZoneId.of("Asia/Kolkata"));
     }

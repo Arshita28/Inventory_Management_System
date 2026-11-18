@@ -38,9 +38,10 @@ import java.util.logging.Logger;
 public final class LocalPreviewServer implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(LocalPreviewServer.class.getName());
     private static final int MAX_FORM_BYTES = 16_384;
-    private static final Set<String> WRITE_ROUTES = Set.of("/products/create", "/products/update",
+    private static final Set<String> WRITE_ROUTES = Set.of("/business/checkout", "/business/return", "/business/count", "/business/count-review", "/business/supplier", "/business/quote", "/business/purchase-batch", "/business/purchase-review", "/products/create", "/products/update",
             "/products/deactivate", "/stock/receive", "/stock/sell", "/purchase/create", "/purchase/action",
             "/purchase/receive", "/suppliers/offers/create", "/demo/actor", "/auth/logout", "/users/create", "/users/update");
+    private final ServerSettings settings;
     private final AccessService access;
     private final LoginPage loginPage;
     private final boolean personasEnabled;
@@ -70,7 +71,16 @@ public final class LocalPreviewServer implements AutoCloseable {
         this(inventory, null, port, false, java.util.Objects.requireNonNull(access), personasEnabled);
     }
 
+    public LocalPreviewServer(InventoryService inventory,AccessService access,int port,ServerSettings settings) throws IOException {
+        this(inventory,null,port,false,java.util.Objects.requireNonNull(access),false,settings);
+    }
+
     private LocalPreviewServer(InventoryService inventory, User viewer, int port, boolean demoSwitch, AccessService access, boolean personasEnabled) throws IOException {
+        this(inventory,viewer,port,demoSwitch,access,personasEnabled,ServerSettings.local());
+    }
+
+    private LocalPreviewServer(InventoryService inventory,User viewer,int port,boolean demoSwitch,AccessService access,boolean personasEnabled,ServerSettings settings) throws IOException {
+        this.settings=settings;
         this.personasEnabled = personasEnabled;
         this.access = access;
         this.loginPage = new LoginPage();
@@ -79,7 +89,7 @@ public final class LocalPreviewServer implements AutoCloseable {
         this.operations = inventory.operations();
         this.demoSwitch = demoSwitch;
         page = new InventoryPage(inventory, access);
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        server = HttpServer.create(new InetSocketAddress(settings.bindAddress(), port), 0);
         server.createContext("/", this::handle);
         server.setExecutor(executor);
     }
@@ -102,7 +112,7 @@ public final class LocalPreviewServer implements AutoCloseable {
         try {
             // This installation serves only the explicit loopback origin.
             String host = exchange.getRequestHeaders().getFirst("Host");
-            if (!("localhost:" + port()).equals(host) && !("127.0.0.1:" + port()).equals(host)) {
+            if (!settings.acceptsHost(host,port())) {
                 respond(exchange, 403, "text/plain", "Use the localhost preview address.");
                 return;
             }
@@ -115,7 +125,7 @@ public final class LocalPreviewServer implements AutoCloseable {
             boolean inventoryQuery = path.equals("/") && parseFields(exchange.getRequestURI().getRawQuery()).keySet().stream()
                     .anyMatch(key -> Set.of("sku", "q", "scope", "category", "status", "from", "to", "order", "newCategory").contains(key));
             if (access != null && actor == null && (path.equals("/app") || path.equals("/api/inventory")
-                    || path.equals("/export/inventory.csv") || WRITE_ROUTES.contains(path) || inventoryQuery)) {
+                    || path.startsWith("/export/") || WRITE_ROUTES.contains(path) || inventoryQuery)) {
                 if (path.startsWith("/api/") || path.startsWith("/export/")) respond(exchange, 401, "text/plain", "Login required.");
                 else redirect(exchange, "/?login=1#login");
                 return;
@@ -129,6 +139,10 @@ public final class LocalPreviewServer implements AutoCloseable {
                 respond(exchange, 405, "text/plain", "Method not allowed");
                 return;
             }
+            if(WRITE_ROUTES.contains(path)) {
+                String target=path.startsWith("/stock/") || path.startsWith("/products/")?"management":path.contains("purchase")?"purchase-batches":path.startsWith("/business/")?"sales":"home";
+                redirect(exchange,"/app#"+target);return;
+            }
             switch (path) {
                 case "/" -> {
                     if (!inventoryQuery) landing(exchange, parseFields(exchange.getRequestURI().getRawQuery()), "", "", "ADMIN", false);
@@ -137,7 +151,13 @@ public final class LocalPreviewServer implements AutoCloseable {
                 }
                 case "/app" -> respond(exchange, 200, "text/html", page.render(actor,
                         parseFields(exchange.getRequestURI().getRawQuery()), Map.of(), "", "", requestCsrf(exchange), demoSwitch));
+                case "/export/backup.sql" -> {
+                    String script=inventory.business().backup(actor);
+                    exchange.getResponseHeaders().set("Content-Disposition","attachment; filename=voltedge-backup.sql");
+                    respond(exchange,200,"application/sql",script);
+                }
                 case "/health" -> respond(exchange, 200, "text/plain", "ok");
+                case "/ready" -> {boolean ready=inventory.ready();respond(exchange,ready?200:503,"text/plain",ready?"ready":"unavailable");}
                 case "/assets/landing.css" -> respondResource(exchange, "/assets/landing.css", "text/css; charset=utf-8");
                 case "/assets/landing.js" -> respondResource(exchange, "/assets/landing.js", "text/javascript; charset=utf-8");
                 case "/assets/landing-final.jpg" -> respondResource(exchange, "/assets/landing-final.jpg", "image/jpeg");
@@ -188,15 +208,14 @@ public final class LocalPreviewServer implements AutoCloseable {
             return;
         }
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin != null && !origin.equals("http://localhost:" + port())
-                && !origin.equals("http://127.0.0.1:" + port())) {
+        if (!settings.acceptsOrigin(origin,port())) {
             respond(exchange, 403, "text/plain", "Cross-origin forms are not accepted.");
             return;
         }
         try {
             if (path.equals("/auth/logout") && access != null) {
                 access.sessions().invalidate(sessionCookie(exchange));
-                exchange.getResponseHeaders().add("Set-Cookie", "inventory_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
+                exchange.getResponseHeaders().add("Set-Cookie", "inventory_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"+settings.cookieFlags());
                 redirect(exchange, "/?login=1&loggedout=1#login");
                 return;
             }
@@ -226,17 +245,20 @@ public final class LocalPreviewServer implements AutoCloseable {
                 redirect(exchange, operationalPost(path, fields, actor));
                 return;
             }
+            if(path.startsWith("/business/")) {
+                redirect(exchange,businessPost(path,fields,actor)); return;
+            }
             String sku = required(fields, "sku");
             String notice;
             switch (path) {
                 case "/products/create" -> {
                     inventory.addProduct(actor, new Product(sku, required(fields, "name"),
-                            new BigDecimal(required(fields, "price")), integer(fields, "reorderLevel"), true, details(fields, false, sku, actor)));
+                            decimal(fields, "price"), integer(fields, "reorderLevel"), true, details(fields, false, sku, actor)));
                     notice = "created";
                 }
                 case "/products/update" -> {
                     inventory.updateProduct(actor, sku, required(fields, "name"),
-                            new BigDecimal(required(fields, "price")), integer(fields, "reorderLevel"), details(fields, true, sku, actor));
+                            decimal(fields, "price"), integer(fields, "reorderLevel"), details(fields, true, sku, actor));
                     notice = "updated";
                 }
                 case "/products/deactivate" -> {
@@ -269,7 +291,7 @@ public final class LocalPreviewServer implements AutoCloseable {
     }
 
     private void formError(HttpExchange exchange, int status, Map<String, String> fields, String action, String message, User actor) throws IOException {
-        Map<String, String> query = Map.of();
+        Map<String, String> query = fields.containsKey("invoice") ? Map.of("invoice", fields.get("invoice")) : Map.of();
         if (!action.equals("/products/create") && fields.containsKey("sku")) {
             boolean exists = inventory.listProducts(actor).stream()
                     .anyMatch(stock -> stock.product().sku().equalsIgnoreCase(fields.get("sku").strip()));
@@ -344,7 +366,7 @@ public final class LocalPreviewServer implements AutoCloseable {
     }
 
     private void setSession(HttpExchange exchange, SessionManager.Session session) {
-        exchange.getResponseHeaders().add("Set-Cookie", "inventory_session=" + session.token() + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800");
+        exchange.getResponseHeaders().add("Set-Cookie", "inventory_session=" + session.token() + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800"+settings.cookieFlags());
     }
 
     private void landing(HttpExchange exchange, Map<String, String> query, String error, String username, String role, boolean forceOpen) throws IOException {
@@ -361,7 +383,7 @@ public final class LocalPreviewServer implements AutoCloseable {
 
     private void authPost(HttpExchange exchange, String path) throws IOException {
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin != null && !origin.equals("http://localhost:" + port()) && !origin.equals("http://127.0.0.1:" + port())) {
+        if (!settings.acceptsOrigin(origin,port())) {
             respond(exchange, 403, "text/plain", "Cross-origin forms are not accepted."); return;
         }
         String type = exchange.getRequestHeaders().getFirst("Content-Type");
@@ -394,10 +416,42 @@ public final class LocalPreviewServer implements AutoCloseable {
         } finally { java.util.Arrays.fill(password, '\0'); }
     }
 
+    private String businessPost(String path,Map<String,String> fields,User actor) {
+        var business=inventory.business();
+        if(business==null) throw new IllegalArgumentException("This workflow requires persistent storage");
+        UUID id=UUID.fromString(required(fields,"requestId"));
+        switch(path) {
+            case "/business/purchase-batch" -> {
+                java.util.List<UUID> offers=new java.util.ArrayList<>();java.util.List<Integer> quantities=new java.util.ArrayList<>();
+                for(int i=0;i<10;i++) if(!fields.getOrDefault("offer"+i,"").isBlank()) {offers.add(UUID.fromString(required(fields,"offer"+i)));quantities.add(integer(fields,"quantity"+i));}
+                operations.createBatch(actor,id,offers,quantities,required(fields,"note"));
+                return "/app?notice=purchase#purchase-batches";
+            }
+            case "/business/purchase-review" -> {
+                operations.transitionBatch(actor,UUID.fromString(required(fields,"groupId")),OrderAction.valueOf(required(fields,"action")),required(fields,"note"));
+                return "/app?notice=purchase#purchase-batches";
+            }
+            case "/business/checkout" -> {
+                java.util.List<com.inventory.service.BusinessService.SaleLine> lines=new java.util.ArrayList<>();
+                for(int i=0;i<20;i++) if(fields.containsKey("sku"+i)) lines.add(new com.inventory.service.BusinessService.SaleLine(required(fields,"sku"+i),integer(fields,"qty"+i)));
+                business.checkout(actor,id,required(fields,"customer"),decimal(fields,"discount"),lines);
+                return "/app?invoice="+id+"&notice=invoice#sales";
+            }
+            case "/business/return" -> { business.returnSale(actor,id,UUID.fromString(required(fields,"invoice")),integer(fields,"line"),integer(fields,"quantity"),required(fields,"disposition"),required(fields,"reason")); return "/app?invoice="+required(fields,"invoice")+"&notice=return#sales"; }
+            case "/business/count" -> business.count(actor,id,Product.normalizeSku(required(fields,"sku")),integer(fields,"counted"),required(fields,"reason"));
+            case "/business/count-review" -> { String decision=required(fields,"decision"); if(!Set.of("approve","reject").contains(decision)) throw new IllegalArgumentException("Choose a review decision"); business.reviewCount(actor,UUID.fromString(required(fields,"countId")),decision.equals("approve")); }
+            case "/business/supplier" -> business.supplier(actor,required(fields,"name"),fields.getOrDefault("contact",""),fields.getOrDefault("email",""),fields.getOrDefault("phone",""),fields.getOrDefault("address",""));
+            case "/business/quote" -> business.editOffer(actor,UUID.fromString(required(fields,"offerId")),decimal(fields,"cost"),integer(fields,"lead"),integer(fields,"minimum"));
+            default -> throw new IllegalArgumentException("Unknown business operation");
+        }
+        String target=path.contains("count")?"stocktaking":path.endsWith("supplier")||path.endsWith("quote")?"supplier-directory":"management";
+        return "/app?notice=saved#"+target;
+    }
+
     private String operationalPost(String path, Map<String, String> fields, User actor) {
         if (path.equals("/suppliers/offers/create")) {
             operations.addOffer(actor, new SupplierOffer(UUID.fromString(required(fields, "requestId")), required(fields, "sku"),
-                    required(fields, "supplierName"), new BigDecimal(required(fields, "unitCost")), integer(fields, "leadDays"), integer(fields, "minimumQuantity")));
+                    required(fields, "supplierName"), decimal(fields, "unitCost"), integer(fields, "leadDays"), integer(fields, "minimumQuantity")));
             return "/app?notice=quote#supplier-quotes";
         }
         UUID orderId;
@@ -426,7 +480,11 @@ public final class LocalPreviewServer implements AutoCloseable {
     }
 
     private static int integer(Map<String, String> fields, String key) {
-        return Integer.parseInt(required(fields, key));
+        return com.inventory.validation.FieldTypes.integer(required(fields,key),com.inventory.validation.FieldTypes.label(key));
+    }
+
+    private static BigDecimal decimal(Map<String,String> fields,String key) {
+        return com.inventory.validation.FieldTypes.decimal(required(fields,key),com.inventory.validation.FieldTypes.label(key));
     }
 
     private ProductDetails details(Map<String, String> fields, boolean editing, String sku, User actor) {
@@ -446,7 +504,7 @@ public final class LocalPreviewServer implements AutoCloseable {
     }
 
     private String inventoryJson(User actor) {
-        StringBuilder json = new StringBuilder("{\"company\":\"VoltEdge Electronics\",\"storage\":\"H2 JDBC\",\"readOnly\":false,\"products\":[");
+        StringBuilder json = new StringBuilder("{\"company\":\"VoltEdge Electronics\",\"storage\":"+quote(inventory.storageLabel()+" JDBC")+",\"readOnly\":false,\"products\":[");
         boolean first = true;
         for (StockSummary stock : inventory.listProducts(actor)) {
             if (!first) {

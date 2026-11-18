@@ -20,8 +20,9 @@ import static com.inventory.preview.InventoryPage.html;
 /** Rendering only: all numbers and transitions are provided by application services. */
 final class OperationsPage {
     private final OperationsService operations;
+    private final com.inventory.service.BusinessService business;
 
-    OperationsPage(OperationsService operations) { this.operations = operations; }
+    OperationsPage(OperationsService operations,com.inventory.service.BusinessService business) { this.operations = operations; this.business=business; }
 
     record View(String hero, String content) { }
 
@@ -32,7 +33,7 @@ final class OperationsPage {
         var dashboard = operations.dashboard(actor, from, to);
         var report = dashboard.analytics();
         var snapshot = dashboard.snapshot();
-        StringBuilder out = new StringBuilder(DashboardPresentation.overview(report, snapshot));
+        StringBuilder out = new StringBuilder(ManagementDashboard.render(report,snapshot,business==null?java.util.List.of():business.invoices(actor),operations.today()));
         out.append("<section id='analytics' data-view='analytics' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Sales &amp; inventory analytics</h2><p>Recorded unit movements in ")
                 .append(report.zone()).append(". Current stock value uses today's selling prices, not acquisition cost.</p></div>");
         out.append("<form class='date-filter' method='get' action='/app#analytics'>")
@@ -91,7 +92,7 @@ final class OperationsPage {
     }
 
     private String orders(User actor, InventorySnapshot snapshot, Map<String, String> query, String csrf, Map<String, String> submitted, String action) {
-        StringBuilder out = new StringBuilder("<section id='purchase-orders' data-view='purchase-orders' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Purchase orders</h2><p>Draft → submit → independent approval → partial or full receipt. All orders are local records; nothing is sent to suppliers.</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
+        StringBuilder out = new StringBuilder("<section id='purchase-orders' data-view='purchase-orders' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Purchase orders</h2><p>Review purchase lines, approvals and deliveries.</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
         for (var order : snapshot.orders().reversed()) {
             out.append("<tr><td><a href='/app?order=").append(order.id()).append("#purchase-orders'>").append(order.number()).append("</a><small>")
                     .append(html(order.sku())).append("</small></td><td>").append(html(order.supplierName())).append("</td><td>").append(order.status())
@@ -99,7 +100,7 @@ final class OperationsPage {
                     .append(order.totalCost().toPlainString()).append("</td><td>").append(order.expectedOn())
                     .append(order.status().isOpen() && order.expectedOn().isBefore(operations.today()) ? " · overdue estimate" : "").append("</td></tr>");
         }
-        if (snapshot.orders().isEmpty()) out.append("<tr><td colspan='6' class='empty'>No purchase orders yet. Start from a replenishment card above.</td></tr>");
+        if (snapshot.orders().isEmpty()) out.append("<tr><td colspan='6' class='empty'>No purchase orders recorded.</td></tr>");
         out.append("</tbody></table></div>");
         PurchaseOrder selected = query.containsKey("order")
                 ? snapshot.orders().stream().filter(order -> order.id().toString().equals(query.get("order"))).findFirst().orElse(null)
@@ -114,7 +115,7 @@ final class OperationsPage {
                 + html(DemoData.actorName(order.createdBy())) + ". " + html(order.note()) + "</p><div class='order-actions'>");
         if (order.status() == OrderStatus.DRAFT) out.append(actionForm(order, OrderAction.SUBMIT, "Submit for approval", csrf));
         if (order.status() == OrderStatus.PENDING_APPROVAL) {
-            if (order.createdBy().equals(actor.id())) out.append("<p>Switch to another demo manager to review this order. Self-approval is blocked.</p>");
+            if (order.createdBy().equals(actor.id())) out.append("<p>Another Manager or Admin must review this order.</p>");
             else out.append(actionForm(order, OrderAction.APPROVE, "Approve order", csrf)).append(actionForm(order, OrderAction.REJECT, "Reject order", csrf));
         }
         if (order.status().isOpen() && order.receivedQuantity() == 0) out.append(actionForm(order, OrderAction.CANCEL, "Cancel order", csrf));
@@ -158,7 +159,7 @@ final class OperationsPage {
         long max = report.daily().stream().mapToLong(day -> Math.max(day.sold(), day.received())).max().orElse(0);
         int count = report.daily().size();
         double step = 880.0 / count;
-        StringBuilder svg = new StringBuilder("<div class='trend-chart'><h3>Daily unit movements</h3><p class='muted'>Lime: sold · Sage: received. Use the daily data table for exact figures. Days without recorded movements appear as zero.</p><svg role='img' aria-label='Daily units sold and received' viewBox='0 0 900 180'>");
+        StringBuilder svg = new StringBuilder("<div class='trend-chart'><h3>Daily unit movements</h3><p class='muted'>Lime: sold · Sage: received. Expand the table for daily quantities.</p><svg role='img' aria-label='Daily units sold and received' viewBox='0 0 900 180'>");
         for (int index = 0; index < count; index++) {
             var day = report.daily().get(index);
             double soldHeight = max == 0 ? 0 : day.sold() * 140.0 / max;
@@ -188,6 +189,7 @@ final class OperationsPage {
     private static String metric(String label, String value, String note) { return "<div><span>" + label + "</span><strong>" + value + "</strong><small>" + note + "</small></div>"; }
     private static String hidden(String name, String value) { return "<input type='hidden' name='" + name + "' value='" + html(value) + "'>"; }
     private static String input(String label, String name, String type, String value, String attributes) {
+        if(type.equals("number")) return NumericFields.render(label,name,value,attributes);
         return "<label>" + label + "<input required type='" + type + "' name='" + name + "' value='" + html(value) + "' " + attributes + "></label>";
     }
 }

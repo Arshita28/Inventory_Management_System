@@ -36,12 +36,20 @@ import java.util.function.IntFunction;
  * This intentionally favors a clear correctness model over write throughput.
  */
 public final class JdbcInventoryRepository implements InventoryRepository {
-    private final String jdbcUrl;
+    private final com.inventory.database.Database database;
 
     public JdbcInventoryRepository(String jdbcUrl) {
-        this.jdbcUrl = Objects.requireNonNull(jdbcUrl);
+        this(com.inventory.database.Database.h2(jdbcUrl));
+    }
+
+    public JdbcInventoryRepository(com.inventory.database.Database database) {
+        this.database=Objects.requireNonNull(database);
         initializeSchema();
     }
+
+    public com.inventory.database.Database database() {return database;}
+
+    public String jdbcUrl() { return database.jdbcUrl(); }
 
     @Override
     public void add(Product product) {
@@ -257,10 +265,20 @@ public final class JdbcInventoryRepository implements InventoryRepository {
     }
 
     private void initializeSchema() {
+        if(database.postgres()) {com.inventory.database.PostgresSchema.initialize(database);return;}
         try (Connection connection = connect()) {
             executeScript(connection, "/database/schema-h2.sql");
             executeScript(connection, "/database/V002__electronics_details.sql");
             executeScript(connection, "/database/V003__procurement.sql");
+            executeScript(connection, "/database/V005__business.sql");
+            java.util.List<String> checks = new java.util.ArrayList<>();
+            try (var query = connection.prepareStatement("SELECT tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc ON tc.CONSTRAINT_NAME=cc.CONSTRAINT_NAME AND tc.CONSTRAINT_SCHEMA=cc.CONSTRAINT_SCHEMA WHERE tc.TABLE_NAME='STOCK_MOVEMENTS'"); var rows=query.executeQuery()) {
+                while(rows.next()) if(rows.getString(2).contains("MOVEMENT_TYPE")) checks.add(rows.getString(1));
+            }
+            try(var statement=connection.createStatement()) {
+                for(String name:checks) statement.execute("ALTER TABLE stock_movements DROP CONSTRAINT \""+name.replace("\"","\"\"")+"\"");
+                statement.execute("ALTER TABLE stock_movements ADD CONSTRAINT valid_movement_type CHECK ((movement_type='RECEIPT' AND quantity>0) OR (movement_type='SALE' AND quantity<0) OR (movement_type='RETURN' AND quantity>0) OR movement_type='ADJUSTMENT')");
+            }
         } catch (IOException | SQLException exception) {
             throw new PersistenceException("Unable to initialize inventory storage", exception);
         }
@@ -283,7 +301,7 @@ public final class JdbcInventoryRepository implements InventoryRepository {
     }
 
     private Connection connect() throws SQLException {
-        return DriverManager.getConnection(jdbcUrl, "sa", "");
+        return database.connect();
     }
 
     @Override
@@ -332,8 +350,52 @@ public final class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public PurchaseOrder createOrder(PurchaseOrder draft) {
+        return transaction(connection -> { lockWrites(connection); return createOrder(connection,draft); });
+    }
+
+    public java.util.List<PurchaseOrder> createOrderBatch(UUID groupId,java.util.List<PurchaseOrder> drafts) {
         return transaction(connection -> {
             lockWrites(connection);
+            if(drafts.isEmpty() || drafts.size()>10) throw new IllegalArgumentException("Choose between 1 and 10 products");
+            java.util.Set<UUID> existingIds=new java.util.HashSet<>();
+            try(var statement=connection.prepareStatement("SELECT id FROM purchase_orders WHERE group_id=?")) {
+                statement.setString(1,groupId.toString());try(var rows=statement.executeQuery()){while(rows.next()) existingIds.add(UUID.fromString(rows.getString(1)));}
+            }
+            if(!existingIds.isEmpty() && !existingIds.equals(drafts.stream().map(PurchaseOrder::id).collect(java.util.stream.Collectors.toSet()))) throw new InventoryException("Purchase request already used with different lines");
+            String supplier=drafts.getFirst().supplierName();
+            java.util.Set<String> skus=new java.util.HashSet<>();
+            for(var draft:drafts) if(!draft.supplierName().equals(supplier) || !skus.add(draft.sku())) throw new IllegalArgumentException("Choose distinct products from the same supplier");
+            java.util.List<PurchaseOrder> result=new java.util.ArrayList<>();
+            for(var draft:drafts) {
+                result.add(createOrder(connection,draft));
+                try(var statement=connection.prepareStatement("UPDATE purchase_orders SET group_id=? WHERE id=? AND (group_id IS NULL OR group_id=?)")) {
+                    statement.setString(1,groupId.toString());statement.setString(2,draft.id().toString());statement.setString(3,groupId.toString());
+                    if(statement.executeUpdate()!=1) throw new InventoryException("Purchase line belongs to another order");
+                }
+            }
+            return java.util.List.copyOf(result);
+        });
+    }
+
+    public void transitionBatch(UUID groupId, OrderAction action, UUID actor, String note, Instant at) {
+        transaction(connection -> {
+            lockWrites(connection);
+            java.util.List<UUID> ids=new java.util.ArrayList<>();
+            try(var statement=connection.prepareStatement("SELECT id FROM purchase_orders WHERE group_id=?")) {
+                statement.setString(1,groupId.toString());try(var rows=statement.executeQuery()){while(rows.next()) ids.add(UUID.fromString(rows.getString(1)));}
+            }
+            if(ids.isEmpty()) throw new InventoryException("Purchase order not found");
+            for(UUID id:ids) {
+                PurchaseOrder next=requireOrder(connection,id).transition(action,actor);
+                updateOrderState(connection,next);
+                addEvent(connection,new OrderEvent(id,action.name(),actor,PurchaseOrder.validNote(note),at));
+            }
+            return null;
+        });
+    }
+
+    private PurchaseOrder createOrder(Connection connection,PurchaseOrder draft) throws SQLException {
+
             List<PurchaseOrder> orders = loadOrders(connection);
             var previous = orders.stream().filter(order -> order.id().equals(draft.id())).findFirst();
             if (previous.isPresent()) {
@@ -362,7 +424,6 @@ public final class JdbcInventoryRepository implements InventoryRepository {
             }
             addEvent(connection, new OrderEvent(draft.id(), "CREATED", draft.createdBy(), draft.note(), draft.createdAt()));
             return draft;
-        });
     }
 
     @Override

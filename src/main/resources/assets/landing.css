@@ -5,8 +5,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; cursor: pointer; }
 a { color: inherit; }
 a:focus-visible, button:focus-visible { outline: 3px solid #d9ff57; outline-offset: 6px; }
-.landing { position: relative; min-height: max(100svh, 56.25vw); overflow: hidden; background: #080808; }
-.film-frame { position: absolute; top: 0; left: 0; width: 100%; aspect-ratio: 16/9; background: #fff; }
+/* Keep the complete 16:9 scene within the available browser viewport. */
+.landing { --film-height: min(56.25vw, 100svh); --ground-y: calc(var(--film-height) * .53148148); position: relative; min-height: 100svh; overflow: hidden; background: linear-gradient(to bottom, #fefefe 0 var(--ground-y), #080808 var(--ground-y) 100%); }
+.film-frame { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 177.777778svh); aspect-ratio: 16/9; background: #fff; }
+/* Feather the media perimeter into the matching page colors, hiding encoded edge seams. */
+.film-frame { -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent), linear-gradient(to bottom, #000 0, #000 calc(100% - 64px), transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent), linear-gradient(to bottom, #000 0, #000 calc(100% - 64px), transparent); mask-composite: intersect; }
 .film-frame video, .final-frame { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 /* Cover the entire opening header band, including text moving toward the top edge. */
 .film-frame::before {
@@ -36,7 +39,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid #d9ff57; outline-offs
 .final-frame { opacity: 0; pointer-events: none; }
 .is-complete .final-frame, .scene-failed .final-frame { opacity: 1; }
 /* The supplied final frame's black ground begins at y=574 of 1080 pixels. */
-.landing-content { position: relative; margin-top: 29.9vw; min-height: max(calc(100svh - 29.9vw), 26.35vw); display: flex; align-items: center; justify-content: center; padding: clamp(25px, 4vh, 60px) 24px; text-align: center; opacity: 0; visibility: hidden; transform: translateY(22px); transition: opacity .85s ease, transform .85s cubic-bezier(.2,.7,.2,1), visibility .85s; }
+.landing-content { position: relative; margin-top: var(--ground-y); min-height: calc(100svh - var(--ground-y)); display: flex; align-items: center; justify-content: center; padding: clamp(25px, 4vh, 60px) 24px; text-align: center; opacity: 0; visibility: hidden; transform: translateY(22px); transition: opacity .85s ease, transform .85s cubic-bezier(.2,.7,.2,1), visibility .85s; }
 .is-complete .landing-content { opacity: 1; visibility: visible; transform: none; }
 .content-inner { max-width: 760px; }
 .eyebrow { margin: 0 0 20px; font-size: 11px; letter-spacing: .21em; font-weight: 500; color: #aaa99f; }

@@ -10,10 +10,15 @@ import java.util.*;
 /** Account mutations share a database lock, including first-admin and last-admin checks. */
 public final class JdbcAccountRepository {
     public record Credential(User user, String hash) { }
-    private final String url;
+    private final com.inventory.database.Database database;
 
     public JdbcAccountRepository(String url) {
-        this.url = Objects.requireNonNull(url);
+        this(com.inventory.database.Database.h2(url));
+    }
+
+    public JdbcAccountRepository(com.inventory.database.Database database) {
+        this.database=Objects.requireNonNull(database);
+        if(database.postgres()) {com.inventory.database.PostgresSchema.initialize(database);return;}
         try (var input = getClass().getResourceAsStream("/database/V004__accounts.sql"); var c = connect()) {
             if (input == null) throw new IllegalStateException("Account schema is missing");
             for (String sql : new String(input.readAllBytes(), StandardCharsets.UTF_8).split(";")) {
@@ -22,7 +27,7 @@ public final class JdbcAccountRepository {
         } catch (java.io.IOException | SQLException exception) { throw failure(exception); }
     }
 
-    private Connection connect() throws SQLException { return DriverManager.getConnection(url, "sa", ""); }
+    private Connection connect() throws SQLException { return database.connect(); }
     private PersistenceException failure(Exception cause) { return new PersistenceException("Unable to access account storage", cause); }
 
     public Optional<Credential> find(String username) {
@@ -53,7 +58,7 @@ public final class JdbcAccountRepository {
             try (var q = c.prepareStatement("INSERT INTO app_users(id,username,password_hash,role,active,created_at) VALUES(?,?,?,?,?,?)")) {
                 q.setString(1, user.id().toString()); q.setString(2, user.username()); q.setString(3, hash);
                 q.setString(4, user.role().name()); q.setBoolean(5, true); q.setString(6, now); q.executeUpdate();
-            } catch (SQLIntegrityConstraintViolationException exception) { throw new IllegalArgumentException("That username is already in use."); }
+            } catch (SQLException exception) { if("23505".equals(exception.getSQLState())) throw new IllegalArgumentException("That username is already in use."); throw exception; }
             event(c, bootstrap ? user.id() : actor.id(), user.id(), bootstrap ? "ADMIN_SETUP" : "ACCOUNT_CREATED", now);
         });
     }
