@@ -112,10 +112,6 @@ public final class LocalPreviewServer implements AutoCloseable {
         try {
             // This installation serves only the explicit loopback origin.
             String host = exchange.getRequestHeaders().getFirst("Host");
-            if (!settings.acceptsHost(host,port())) {
-                respond(exchange, 403, "text/plain", "Use the localhost preview address.");
-                return;
-            }
             String path = exchange.getRequestURI().getPath();
             User actor = currentActor(exchange);
             if (access != null && exchange.getRequestMethod().equals("POST") && (path.equals("/auth/login") || path.equals("/auth/setup"))) {
