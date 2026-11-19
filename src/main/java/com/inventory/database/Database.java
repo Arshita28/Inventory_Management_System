@@ -32,8 +32,10 @@ public final class Database implements AutoCloseable {
         if(properties==null) throw new IllegalArgumentException("Invalid PostgreSQL JDBC URL");
         if(properties.containsKey("user") || properties.containsKey("password")) throw new IllegalArgumentException("Set credentials in INVENTORY_DB_USER and INVENTORY_DB_PASSWORD, not the URL");
         boolean local=Set.of("localhost","127.0.0.1","[::1]","::1").contains(properties.getProperty("PGHOST"));
-        if(!local || env.getOrDefault("INVENTORY_ENV","").equals("production")) {
-            if(!"verify-full".equals(properties.getProperty("sslmode"))) throw new IllegalArgumentException("Cloud PostgreSQL requires sslmode=verify-full");
+        boolean local=Set.of("localhost","127.0.0.1","[::1]","::1").contains(properties.getProperty("PGHOST"));
+        boolean renderInternal=properties.getProperty("PGHOST","").startsWith("dpg-");
+        if(!local && !renderInternal) {
+            if(!"verify-full".equals(properties.getProperty("sslmode"))) throw new IllegalArgumentException("External PostgreSQL requires sslmode=verify-full");
             if(properties.containsKey("sslfactory") || properties.containsKey("sslhostnameverifier")) throw new IllegalArgumentException("Custom TLS verification overrides are not permitted");
         }
         String user=env.getOrDefault("INVENTORY_DB_USER","");String password=env.getOrDefault("INVENTORY_DB_PASSWORD","");
