@@ -110,9 +110,9 @@ public final class App {
         var settings=com.inventory.preview.ServerSettings.fromEnvironment(System.getenv());
         var db=com.inventory.database.Database.fromEnvironment(System.getenv(),database);
         boolean production="production".equals(System.getenv("INVENTORY_ENV"));
-        if(production && (Arrays.asList(args).contains("--seed-demo") || Arrays.asList(args).contains("--demo-personas"))) {
+        /*if(production && (Arrays.asList(args).contains("--seed-demo") || Arrays.asList(args).contains("--demo-personas"))) {
             db.close();throw new IllegalArgumentException("Demo accounts and sample stock are disabled in production");
-        }
+        }*/
         if(!db.postgres())Files.createDirectories(Path.of(database).toAbsolutePath().getParent());
         InventoryService inventory = new InventoryService(
                 new JdbcInventoryRepository(db),
@@ -122,7 +122,7 @@ public final class App {
         }
         AccessService access = new AccessService(new JdbcAccountRepository(db), Clock.systemUTC());
         boolean demoPersonas = Arrays.asList(args).contains("--demo-personas");
-        if (demoPersonas) access.installDemoPersonas();
+        if (demoPersonas || production && access.needsSetup()) access.installDemoPersonas();
         if(production && access.needsSetup()) {db.close();throw new IllegalArgumentException("Create the first Admin using a local PostgreSQL-connected session before starting production");}
         LocalPreviewServer preview = settings.secureCookies()?new LocalPreviewServer(inventory,access,port,settings):new LocalPreviewServer(inventory, access, port, demoPersonas);
         Runtime.getRuntime().addShutdownHook(new Thread(()->{preview.close();db.close();}));
