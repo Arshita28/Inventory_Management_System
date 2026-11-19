@@ -208,9 +208,8 @@ class LocalPreviewServerTest {
         String html = get("/app").body();
         assertFalse(html.contains("action='/stock/receive'"));
         assertFalse(html.contains("action='/products/create'"));
-        assertTrue(html.contains("action='/stock/sell'"));
-        assertEquals(403, post("/stock/receive", Map.of("sku", "VE-CHG-001", "quantity", "1", "reason", "Receipt",
-                "requestId", UUID.randomUUID().toString())).statusCode());
+        assertFalse(html.contains("action='/stock/sell'"));
+        assertEquals(403, rawPost("/stock/receive", "sku=VE-CHG-001&quantity=1&reason=Receipt&requestId="+UUID.randomUUID()).statusCode());
         assertEquals(4, inventory.getStock(DemoData.MANAGER, "VE-CHG-001").quantity());
     }
 

@@ -239,7 +239,7 @@ final class InventoryPage {
         StringBuilder forms = new StringBuilder("<div class='stock-forms'>");
         for (String operation : List.of("receive", "sell")) {
             Permission permission = operation.equals("receive") ? Permission.RECEIVE_STOCK : Permission.SELL_STOCK;
-            if (!viewer.role().allows(permission)) {
+            if (!viewer.role().allows(permission) || (operation.equals("sell") && viewer.role()==com.inventory.security.Role.STAFF)) {
                 continue;
             }
             String path = "/stock/" + operation;
@@ -253,6 +253,7 @@ final class InventoryPage {
                     .append(input(label + " reason", "reason", "text", fields.getOrDefault("reason", ""), "maxlength='2000'"))
                     .append("<button type='submit'>").append(label).append("</button></form></details>");
         }
+        if(viewer.role()==com.inventory.security.Role.STAFF) return "";
         return forms.append("<p class='muted'>Stock changes are recorded immediately. Use Sales &amp; returns for customer invoices.</p></div>").toString();
     }
 

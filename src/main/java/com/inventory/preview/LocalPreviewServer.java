@@ -272,6 +272,7 @@ public final class LocalPreviewServer implements AutoCloseable {
                         inventory.receiveStock(actor, requestId, sku, integer(fields, "quantity"), required(fields, "reason"));
                         notice = "received";
                     } else {
+                        if(actor.role()==Role.STAFF) throw new AccessDeniedException("Quick stock sale is available to Managers and Admins. Use Place order for customer sales.");
                         inventory.sellStock(actor, requestId, sku, integer(fields, "quantity"), required(fields, "reason"));
                         notice = "sold";
                     }

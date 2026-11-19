@@ -87,7 +87,7 @@ class AuthenticatedServerTest {
         assertFalse(page.contains("href='#add-product'"));
         assertFalse(page.contains("Review stock alerts"));
         assertFalse(page.contains("action='/stock/receive'"));
-        assertTrue(page.contains("action='/stock/sell'"));
+        assertFalse(page.contains("action='/stock/sell'"));
         assertEquals(403,browser.post("/users/create",Map.of("csrf",token(page),"username","intruder","password",PASSWORD,"role","ADMIN")).statusCode());
     }
     @Test void sessionCsrfCannotBeUsedByAnotherBrowser() throws Exception {

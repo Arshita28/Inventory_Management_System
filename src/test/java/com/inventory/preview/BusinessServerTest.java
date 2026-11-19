@@ -112,6 +112,17 @@ class BusinessServerTest {
         assertEquals(403,post("/business/count",Map.of("csrf",csrf(),"requestId",UUID.randomUUID().toString(),"sku","A","counted","1","reason","Count")).statusCode());
         assertEquals(403,post("/business/checkout",Map.of("csrf","invalid")).statusCode());
     }
+    @Test void quickStockSaleIsRestrictedToManagersAndAdmins() throws Exception {
+        for(Role role:List.of(Role.STAFF,Role.MANAGER,Role.ADMIN)) {
+            server.close();server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"test",role,true),0);server.start();
+            String page=get("/app").body();
+            assertEquals(role!=Role.STAFF,page.contains("Quick stock sale"));
+            int before=inventory.getStock(manager,"A").quantity();
+            var response=post("/stock/sell",Map.of("csrf",csrf(),"requestId",UUID.randomUUID().toString(),"sku","A","quantity","1","reason","Counter sale"));
+            assertEquals(role==Role.STAFF?403:303,response.statusCode());
+            assertEquals(before-(role==Role.STAFF?0:1),inventory.getStock(manager,"A").quantity());
+        }
+    }
     @Test void removedBarcodeRoutesAndBackupDownloadWork()throws Exception {
         assertEquals(404,get("/lookup?code=987654").statusCode());
         assertEquals(405,post("/business/barcode",Map.of("csrf",csrf())).statusCode());

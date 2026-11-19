@@ -8,8 +8,9 @@ a:focus-visible, button:focus-visible { outline: 3px solid #d9ff57; outline-offs
 /* Keep the complete 16:9 scene within the available browser viewport. */
 .landing { --film-height: min(56.25vw, 100svh); --ground-y: calc(var(--film-height) * .53148148); position: relative; min-height: 100svh; overflow: hidden; background: linear-gradient(to bottom, #fefefe 0 var(--ground-y), #080808 var(--ground-y) 100%); }
 .film-frame { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 177.777778svh); aspect-ratio: 16/9; background: #fff; }
-/* Feather the media perimeter into the matching page colors, hiding encoded edge seams. */
-.film-frame { -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent), linear-gradient(to bottom, #000 0, #000 calc(100% - 64px), transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent), linear-gradient(to bottom, #000 0, #000 calc(100% - 64px), transparent); mask-composite: intersect; }
+/* Solid black letterboxing outside the animation, without blurred edge masks. */
+.intro-pending .landing { background: #080808; }
+.film-frame { overflow: hidden; }
 .film-frame video, .final-frame { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 /* Cover the entire opening header band, including text moving toward the top edge. */
 .film-frame::before {
@@ -38,6 +39,13 @@ a:focus-visible, button:focus-visible { outline: 3px solid #d9ff57; outline-offs
 }
 .final-frame { opacity: 0; pointer-events: none; }
 .is-complete .final-frame, .scene-failed .final-frame { opacity: 1; }
+/* Replace the still's compressed black ground and hairline perimeter with flat page colors. */
+.is-complete .film-frame, .scene-failed .film-frame {
+    background: linear-gradient(to bottom, #fefefe 0 53.148148%, #080808 53.148148% 100%);
+}
+.is-complete .film-frame video, .scene-failed .film-frame video { visibility: hidden; }
+.final-frame { clip-path: inset(0 2px 46.851852%); }
+
 /* The supplied final frame's black ground begins at y=574 of 1080 pixels. */
 .landing-content { position: relative; margin-top: var(--ground-y); min-height: calc(100svh - var(--ground-y)); display: flex; align-items: center; justify-content: center; padding: clamp(25px, 4vh, 60px) 24px; text-align: center; opacity: 0; visibility: hidden; transform: translateY(22px); transition: opacity .85s ease, transform .85s cubic-bezier(.2,.7,.2,1), visibility .85s; }
 .is-complete .landing-content { opacity: 1; visibility: visible; transform: none; }
