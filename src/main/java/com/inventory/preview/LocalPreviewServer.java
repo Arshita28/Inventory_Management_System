@@ -89,7 +89,7 @@ public final class LocalPreviewServer implements AutoCloseable {
         this.operations = inventory.operations();
         this.demoSwitch = demoSwitch;
         page = new InventoryPage(inventory, access);
-        server = HttpServer.create(new InetSocketAddress(settings.bindAddress(), port), 0);
+        server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/", this::handle);
         server.setExecutor(executor);
     }
