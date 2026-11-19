@@ -122,7 +122,7 @@ public final class App {
         }
         AccessService access = new AccessService(new JdbcAccountRepository(db), Clock.systemUTC());
         boolean demoPersonas = Arrays.asList(args).contains("--demo-personas");
-        if (demoPersonas || production && access.needsSetup()) access.installDemoPersonas();
+        if (demoPersonas || production) access.installDemoPersonas();
         if(production && access.needsSetup()) {db.close();throw new IllegalArgumentException("Create the first Admin using a local PostgreSQL-connected session before starting production");}
         LocalPreviewServer preview = settings.secureCookies()?new LocalPreviewServer(inventory,access,port,settings):new LocalPreviewServer(inventory, access, port, demoPersonas);
         Runtime.getRuntime().addShutdownHook(new Thread(()->{preview.close();db.close();}));
