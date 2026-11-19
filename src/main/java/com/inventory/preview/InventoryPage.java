@@ -75,7 +75,7 @@ final class InventoryPage {
         values.put("productCount", String.valueOf(all.size()));
         values.put("unitCount", String.valueOf(all.stream().mapToLong(StockSummary::quantity).sum()));
         values.put("lowCount", String.valueOf(all.stream().filter(StockSummary::isLowStock).count()));
-        values.put("catalogueActions", viewer.role().allows(Permission.MANAGE_PRODUCTS)
+        values.put("catalogueActions", viewer.role()==com.inventory.security.Role.ADMIN
                 ? "<a class='lime-link' href='#add-product'>+ Add product</a>" : "");
         values.put("stockAlerts", viewer.role().allows(Permission.VIEW_ANALYTICS)
                 ? "<a class='header-icon' href='#replenishment' aria-label='Review stock alerts' title='Stock alerts'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9M9 21h6'/></svg><i></i></a>" : "");
@@ -92,24 +92,27 @@ final class InventoryPage {
         String order="M7 3h10v4H7zM7 5H4v16h16V5h-3M8 12h8M8 16h5";
         StringBuilder navigation=new StringBuilder();
         if(viewer.role().allows(Permission.VIEW_ANALYTICS)) navigation.append(navItem("dashboard","Dashboard","M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"));
+        boolean admin=viewer.role()==com.inventory.security.Role.ADMIN;
         String inventoryLinks=navItem("management","Product catalogue",box);
-        if(viewer.role().allows(Permission.MANAGE_PRODUCTS)) inventoryLinks+=navItem("add-product","Add product",box)+(inventory.business()!=null?navItem("stocktaking","Stocktaking",order):"");
+        if(admin) inventoryLinks+=navItem("add-product","Add product",box);
         if(viewer.role()==com.inventory.security.Role.STAFF && inventory.business()!=null) {
             navigation.append(navItem("new-sale","New customer order",order));
             navigation.append(navItem("order-history","Order history",order));
             navigation.append(navItem("management","Product catalogue",box));
         } else {
             navigation.append(navGroup("Inventory",box,inventoryLinks));
-            if(inventory.business()!=null) navigation.append(navGroup("Sales","M3 4h3l3 12h10l2-8H7M10 21h.01M18 21h.01",navItem("sales","Invoices & returns",order)+navItem("new-sale","New sale",order)));
+            if(admin && inventory.business()!=null) navigation.append(navItem("sales","Invoices",order));
+            else if(inventory.business()!=null) navigation.append(navGroup("Sales","M3 4h3l3 12h10l2-8H7M10 21h.01M18 21h.01",navItem("sales","Invoices & returns",order)+navItem("new-sale","New sale",order)));
         }
         if(viewer.role().allows(Permission.VIEW_ANALYTICS)) {
-            String purchases=(inventory.business()!=null?navItem("purchase-batches","Purchase orders",order):"")+navItem("purchase-orders","Approvals & deliveries",order)+navItem("replenishment","Replenishment",box);
-            navigation.append(navGroup("Purchasing",order,purchases));
-            navigation.append(navGroup("Suppliers","M3 21V7l9-4 9 4v14M7 10h10M7 15h10",(inventory.business()!=null?navItem("supplier-directory","Supplier directory",box):"")+navItem("supplier-quotes","Supplier quotes",order)));
+            String purchases=(inventory.business()!=null?navItem("purchase-batches","Purchase orders",order):"")+navItem("purchase-orders",admin?"Deliveries":"Approvals & deliveries",order)+navItem("replenishment","Replenishment",box);
+            if(admin) navigation.append(navGroup("Purchasing",order,purchases));
+            else navigation.append(navItem("replenishment","Low stock alerts",box));
+            if(admin) navigation.append(navGroup("Suppliers","M3 21V7l9-4 9 4v14M7 10h10M7 15h10",(inventory.business()!=null?navItem("supplier-directory","Supplier directory",box):"")+navItem("supplier-quotes","Supplier quotes",order)));
             navigation.append(navGroup("Reports","M4 3v18h17M8 16v-4M13 16V8M18 16V5",navItem("analytics","Sales & inventory",order)));
         }
         if(access!=null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navItem("users","Staff & access","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8"));
-        navigation.append(navItem("help","Help & guide","M9 9a3 3 0 1 1 6 0c0 2-3 2-3 4M12 17h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20"));
+        if(!admin) navigation.append(navItem("contact-manager",viewer.role()==com.inventory.security.Role.STAFF?"Contact manager":"Reported issues",order));
         values.put("accountName",html(viewer.username()));
         values.put("accountInitials",html(viewer.username().substring(viewer.username().lastIndexOf('.')+1).substring(0,Math.min(2,viewer.username().length()-viewer.username().lastIndexOf('.')-1)).toUpperCase(Locale.ROOT)));
         values.put("navigation", navigation.toString());
@@ -124,9 +127,13 @@ final class InventoryPage {
         values.put("filters", filters(all, search, category, status, scope, viewer.role()!=com.inventory.security.Role.STAFF));
         values.put("resultCount", "Showing " + products.size() + " of " + all.size() + " products");
         values.put("stockForms", stockForms(viewer, selected, csrf, submitted, action));
-        values.put("productForms", productForms(viewer, selected, csrf, submitted, action, query));
+        String productFormHtml=productForms(viewer, selected, csrf, submitted, action, query);
+        if(viewer.role()!=com.inventory.security.Role.ADMIN) productFormHtml=productFormHtml.replaceFirst("(?s)<section id='add-product'.*?</section>", "");
+        values.put("productForms", productFormHtml);
         String notice = switch (query.getOrDefault("notice", "")) {
             case "saved" -> "Record saved.";
+            case "issue" -> "Issue reported to your manager.";
+            case "resolved" -> "Issue marked resolved.";
             case "invoice" -> "Invoice saved.";
             case "return" -> "Return recorded.";
             case "created" -> "Product created. Receive stock to set its opening quantity.";
@@ -155,6 +162,7 @@ final class InventoryPage {
     }
 
     private static String initialView(Map<String, String> query, String action) {
+        if(action.endsWith("report-issue") || action.endsWith("resolve-issue")) return "contact-manager";
         if(action.startsWith("/business/purchase")) return "purchase-batches";
         if(action.startsWith("/business/count")) return "stocktaking";
         if(action.equals("/business/checkout")) return "new-sale";

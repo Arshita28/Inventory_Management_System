@@ -55,7 +55,7 @@ final class DashboardPresentation {
         long health = active == 0 ? 0 : healthy * 100 / active;
         StringBuilder out = new StringBuilder("<section id='dashboard' data-view='dashboard' class='overview-report workspace-view'><div class='report-heading'><div><span class='section-kicker'>REPORTS</span><h2>Inventory report</h2></div><span class='report-range'>")
                 .append(report.from()).append(" — ").append(report.to()).append("<a href='#analytics' aria-label='Change report period'>" + UiIcons.CHEVRON_DOWN + "</a></span></div><div class='report-grid'>")
-                .append("<article class='overview-card'><div class='card-top'><h3>Key figures</h3><a href='/export/inventory.csv' aria-label='Export inventory CSV'>" + UiIcons.DOWNLOAD + "</a></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
+                .append("<article class='overview-card'><div class='card-top'><h3>Key figures</h3></div><small>Live inventory · selected-period movements</small><table><thead><tr><th>Metric</th><th>Current value</th><th>Basis</th></tr></thead><tbody>")
                 .append("<tr><td>Retail stock value</td><td>").append(decimal(report.currentRetailValue())).append("</td><td class='accent-text'>Current</td></tr>")
                 .append("<tr><td>Units in stock</td><td>").append(number(units)).append("</td><td>On hand</td></tr>")
                 .append("<tr><td>Incoming stock</td><td>").append(number(report.receivedUnits())).append("</td><td>Recorded</td></tr></tbody></table></article>")

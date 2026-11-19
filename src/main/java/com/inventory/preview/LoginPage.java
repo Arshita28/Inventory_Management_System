@@ -50,7 +50,7 @@ final class LoginPage {
                 .append("><button type='button' class='password-toggle' aria-controls='login-password' aria-label='Show password' hidden>Show</button></div>");
         if (setup) form.append("<p class='auth-help' id='password-help'>Use a unique password of 15–128 characters.</p>");
         form.append("<button class='get-started auth-submit' type='submit'>").append(setup ? "Create Admin &amp; log in" : "Login").append("</button></form><p class='auth-help'>")
-                .append(setup ? "First-time setup · available only until the first account is created." : personas.isEmpty() ? "Need an account or password reset? Contact your Admin." : "Demo accounts · credentials are filled for this local preview.")
+                .append(setup ? "First-time setup · available only until the first account is created." : personas.isEmpty() ? "Need an account or password reset? Contact your Admin." : "")
                 .append("</p></section>");
         return template.replace("{{authState}}", open ? "auth-open" : "")
                 .replace("{{loginPanel}}", form.toString());

@@ -118,6 +118,30 @@ public final class BusinessService {
         if(lead<0 || lead>365 || minimum<1) throw new IllegalArgumentException("Enter valid lead time and minimum quantity");
         tx(c->{one(c,"SELECT id FROM supplier_offers WHERE id=?",id);execute(c,"UPDATE supplier_offers SET unit_cost=?,lead_days=?,minimum_quantity=? WHERE id=?",price,lead,minimum,id);return null;});
     }
+    public void reportIssue(User actor,UUID id,String subject,String description) {
+        require(actor,Permission.VIEW_INVENTORY);
+        if(actor.role()!=Role.STAFF) throw new com.inventory.exception.AccessDeniedException("Only Staff can report issues.");
+        String title=text(subject,255,"Subject"),detail=text(description==null || description.isBlank()?subject:description,2000,"Issue details");
+        tx(c->{
+            var existing=rows(c,"SELECT * FROM issue_reports WHERE id=?",id);
+            if(!existing.isEmpty()) {
+                var prior=existing.getFirst();
+                if(!prior.get("reporter_id").equals(actor.id().toString()) || !prior.get("subject").equals(title) || !prior.get("description").equals(detail)) throw new InventoryException("Issue request already used");
+                return null;
+            }
+            execute(c,"INSERT INTO issue_reports(id,reporter_id,reporter_name,subject,description,status,created_at) VALUES(?,?,?,?,?,?,?)",id,actor.id(),actor.username(),title,detail,"OPEN",clock.instant());return null;
+        });
+    }
+    public List<Map<String,String>> issues(User actor) {
+        require(actor,Permission.VIEW_INVENTORY);
+        if(actor.role()==Role.ADMIN) throw new com.inventory.exception.AccessDeniedException("Issue reports are for Staff and Managers.");
+        return tx(c->actor.role()==Role.STAFF?rows(c,"SELECT * FROM issue_reports WHERE reporter_id=? ORDER BY created_at DESC",actor.id()):rows(c,"SELECT * FROM issue_reports ORDER BY created_at DESC"));
+    }
+    public void resolveIssue(User actor,UUID id) {
+        require(actor,Permission.MANAGE_PRODUCTS);
+        if(actor.role()!=Role.MANAGER) throw new com.inventory.exception.AccessDeniedException("Only Managers can resolve issues.");
+        tx(c->{execute(c,"UPDATE issue_reports SET status='RESOLVED' WHERE id=?",id);return null;});
+    }
     public List<Map<String,String>> invoices(User actor) {require(actor,Permission.SELL_STOCK);return tx(c->rows(c,"SELECT * FROM invoices ORDER BY invoice_number DESC"));}
     public List<Map<String,String>> lines(User actor,UUID invoice) {require(actor,Permission.SELL_STOCK);return tx(c->rows(c,"SELECT * FROM invoice_lines WHERE invoice_id=? ORDER BY line_no",invoice));}
     public List<Map<String,String>> returns(User actor) {require(actor,Permission.RECEIVE_STOCK);return tx(c->rows(c,"SELECT * FROM sales_returns ORDER BY created_at DESC"));}

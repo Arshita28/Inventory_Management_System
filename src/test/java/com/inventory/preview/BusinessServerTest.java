@@ -123,6 +123,19 @@ class BusinessServerTest {
             assertEquals(before-(role==Role.STAFF?0:1),inventory.getStock(manager,"A").quantity());
         }
     }
+    @Test void issueReportsArePrivateToReporterAndManagersCanResolve() {
+        User staff=new User(UUID.randomUUID(),"reporter",Role.STAFF,true);
+        User other=new User(UUID.randomUUID(),"other",Role.STAFF,true);
+        var service=inventory.business();UUID id=UUID.randomUUID();
+        service.reportIssue(staff,id,"Wrong stock","Charger stock needs checking");
+        service.reportIssue(staff,id,"Wrong stock","Charger stock needs checking");
+        assertEquals(1,service.issues(staff).size());
+        assertTrue(service.issues(other).isEmpty());
+        assertEquals(1,service.issues(manager).size());
+        assertThrows(com.inventory.exception.AccessDeniedException.class,()->service.resolveIssue(staff,id));
+        service.resolveIssue(manager,id);
+        assertEquals("RESOLVED",service.issues(staff).getFirst().get("status"));
+    }
     @Test void removedBarcodeRoutesAndBackupDownloadWork()throws Exception {
         assertEquals(404,get("/lookup?code=987654").statusCode());
         assertEquals(405,post("/business/barcode",Map.of("csrf",csrf())).statusCode());

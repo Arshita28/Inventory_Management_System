@@ -30,7 +30,7 @@ final class ManagementDashboard {
             if(!date.isBefore(report.from()) && !date.isAfter(report.to())) billed=billed.add(value);
         }
         BigDecimal purchases=snapshot.orders().stream().filter(o->o.status().isOpen()).map(o->o.unitCost().multiply(BigDecimal.valueOf(o.outstanding()))).reduce(BigDecimal.ZERO,BigDecimal::add);
-        StringBuilder out=new StringBuilder("<section id='dashboard' data-view='dashboard' class='workspace-view management-dashboard'><div class='dashboard-heading'><div><h1>Dashboard</h1><p>Your electronics inventory, sales and purchasing overview.</p></div><a class='report-range' href='#analytics'>"+report.from()+" — "+report.to()+" "+UiIcons.CHEVRON_DOWN+"</a></div>");
+        StringBuilder out=new StringBuilder("<section id='dashboard' data-view='dashboard' class='workspace-view management-dashboard'><div class='dashboard-heading'><div><h1>Dashboard</h1><p>Your electronics inventory, sales and purchasing overview.</p></div></div>");
         out.append("<section class='panel quick-actions'><h2>Quick actions</h2><div class='quick-action-grid'>")
             .append(action("new-sale","New sale",CART)).append(action("add-product","Add product",BOX))
             .append(action("purchase-batches","Create order",ORDER)).append(action("supplier-directory","Add supplier","M3 21V7l9-4 9 4v14M7 10h10M7 15h10"))

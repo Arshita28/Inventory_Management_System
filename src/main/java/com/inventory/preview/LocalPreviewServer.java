@@ -38,7 +38,7 @@ import java.util.logging.Logger;
 public final class LocalPreviewServer implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(LocalPreviewServer.class.getName());
     private static final int MAX_FORM_BYTES = 16_384;
-    private static final Set<String> WRITE_ROUTES = Set.of("/business/checkout", "/business/return", "/business/count", "/business/count-review", "/business/supplier", "/business/quote", "/business/purchase-batch", "/business/purchase-review", "/products/create", "/products/update",
+    private static final Set<String> WRITE_ROUTES = Set.of("/business/report-issue", "/business/resolve-issue", "/business/checkout", "/business/return", "/business/count", "/business/count-review", "/business/supplier", "/business/quote", "/business/purchase-batch", "/business/purchase-review", "/products/create", "/products/update",
             "/products/deactivate", "/stock/receive", "/stock/sell", "/purchase/create", "/purchase/action",
             "/purchase/receive", "/suppliers/offers/create", "/demo/actor", "/auth/logout", "/users/create", "/users/update");
     private final ServerSettings settings;
@@ -253,6 +253,7 @@ public final class LocalPreviewServer implements AutoCloseable {
             String notice;
             switch (path) {
                 case "/products/create" -> {
+                    if(actor.role()!=Role.ADMIN) throw new AccessDeniedException("Only Admin can add products.");
                     inventory.addProduct(actor, new Product(sku, required(fields, "name"),
                             decimal(fields, "price"), integer(fields, "reorderLevel"), true, details(fields, false, sku, actor)));
                     notice = "created";
@@ -433,6 +434,8 @@ public final class LocalPreviewServer implements AutoCloseable {
                 operations.transitionBatch(actor,UUID.fromString(required(fields,"groupId")),OrderAction.valueOf(required(fields,"action")),required(fields,"note"));
                 return "/app?notice=purchase#purchase-batches";
             }
+            case "/business/report-issue" -> { business.reportIssue(actor,id,"Other".equals(required(fields,"subject"))?required(fields,"otherSubject"):required(fields,"subject"),fields.getOrDefault("description","")); return "/app?notice=issue#contact-manager"; }
+            case "/business/resolve-issue" -> { business.resolveIssue(actor,UUID.fromString(required(fields,"issueId"))); return "/app?notice=resolved#contact-manager"; }
             case "/business/checkout" -> {
                 java.util.List<com.inventory.service.BusinessService.SaleLine> lines=new java.util.ArrayList<>();
                 for(int i=0;i<20;i++) if(fields.containsKey("sku"+i)) lines.add(new com.inventory.service.BusinessService.SaleLine(required(fields,"sku"+i),integer(fields,"qty"+i)));
@@ -460,12 +463,13 @@ public final class LocalPreviewServer implements AutoCloseable {
         if (path.equals("/purchase/create")) {
             orderId = operations.createOrder(actor, UUID.fromString(required(fields, "requestId")), UUID.fromString(required(fields, "offerId")),
                     integer(fields, "quantity"), required(fields, "note")).id();
+            if(actor.role()==Role.MANAGER) operations.transition(actor,orderId,OrderAction.SUBMIT,required(fields,"note"));
         } else {
             orderId = UUID.fromString(required(fields, "orderId"));
             if (path.equals("/purchase/action")) operations.transition(actor, orderId, OrderAction.valueOf(required(fields, "action")), required(fields, "note"));
             else operations.receive(actor, orderId, UUID.fromString(required(fields, "requestId")), integer(fields, "quantity"), required(fields, "note"));
         }
-        return "/app?order=" + orderId + "&notice=purchase#purchase-orders";
+        return "/app?order=" + orderId + "&notice=purchase#"+(actor.role()==Role.MANAGER?"replenishment":"purchase-orders");
     }
 
     private void redirect(HttpExchange exchange, String location) throws IOException {

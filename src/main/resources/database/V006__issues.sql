@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS issue_reports (
+ id VARCHAR(36) PRIMARY KEY, reporter_id VARCHAR(36) NOT NULL, reporter_name VARCHAR(255) NOT NULL,
+ subject VARCHAR(255) NOT NULL, description VARCHAR(2000) NOT NULL, status VARCHAR(20) NOT NULL,
+ created_at VARCHAR(40) NOT NULL
+);

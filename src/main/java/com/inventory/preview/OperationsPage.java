@@ -34,6 +34,14 @@ final class OperationsPage {
         var report = dashboard.analytics();
         var snapshot = dashboard.snapshot();
         StringBuilder out = new StringBuilder(ManagementDashboard.render(report,snapshot,business==null?java.util.List.of():business.invoices(actor),operations.today()));
+        if(actor.role()==com.inventory.security.Role.ADMIN) {
+            String dashboardHtml=out.toString().replaceAll("<a[^>]*href=['\"]#new-sale['\"][^>]*>.*?</a>", "");
+            out.setLength(0);out.append(dashboardHtml);
+        }
+        if(actor.role()==com.inventory.security.Role.MANAGER) {
+            String dashboardHtml=out.toString().replaceAll("<a[^>]*href=['\"]#add-product['\"][^>]*>.*?</a>", "");
+            out.setLength(0);out.append(dashboardHtml);
+        }
         out.append("<section id='analytics' data-view='analytics' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Sales &amp; inventory analytics</h2><p>Recorded unit movements in ")
                 .append(report.zone()).append(". Current stock value uses today's selling prices, not acquisition cost.</p></div>");
         out.append("<form class='date-filter' method='get' action='/app#analytics'>")
@@ -54,13 +62,20 @@ final class OperationsPage {
         }
         out.append("</tbody></table></div></section><section id='replenishment' data-view='replenishment' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Low stock &amp; replenishment</h2><p>Review a suggestion, choose a supplier, and create a purchase draft. An order does not change physical stock until receipt.</p></div><div class='restock-grid'>");
         if (report.restock().isEmpty()) out.append("<p class='empty'>No products need replenishment under this date range and current thresholds.</p>");
-        for (var suggestion : report.restock()) out.append(restockCard(suggestion, snapshot, csrf, action.equals("/purchase/create") ? submitted : Map.of()));
+        if(actor.role()==com.inventory.security.Role.ADMIN) {
+            for(var request:snapshot.orders().reversed()) if(request.status()==OrderStatus.PENDING_APPROVAL) {
+                out.append("<article class='restock-card'><h3>Reorder request · ").append(html(request.sku())).append("</h3><p>").append(request.quantity()).append(" units · ").append(html(request.supplierName())).append("</p><p>").append(html(request.note())).append("</p>");
+                if(!request.createdBy().equals(actor.id())) out.append(actionForm(request,OrderAction.APPROVE,"Approve reorder request",csrf)).append(actionForm(request,OrderAction.REJECT,"Reject reorder request",csrf));
+                out.append("</article>");
+            }
+        }
+        for (var suggestion : report.restock()) out.append(restockCard(actor, suggestion, snapshot, csrf, action.equals("/purchase/create") ? submitted : Map.of()));
         out.append("</div></section>").append(orders(actor, snapshot, query, csrf, submitted, action));
         out.append(quotes(snapshot, csrf));
         return new View(DashboardPresentation.hero(report, snapshot, operations.today()), out.toString());
     }
 
-    private String restockCard(AnalyticsReport.RestockSuggestion suggestion, InventorySnapshot snapshot, String csrf, Map<String, String> submitted) {
+    private String restockCard(User actor, AnalyticsReport.RestockSuggestion suggestion, InventorySnapshot snapshot, String csrf, Map<String, String> submitted) {
         String sku = suggestion.stock().product().sku();
         Map<String, String> fields = snapshot.offers().stream().anyMatch(offer -> offer.sku().equals(sku) && offer.id().toString().equals(submitted.get("offerId"))) ? submitted : Map.of();
         StringBuilder out = new StringBuilder("<article class='restock-card'><h3>" + html(suggestion.stock().product().name()) + "</h3><small>" + html(sku) + "</small>");
@@ -72,11 +87,20 @@ final class OperationsPage {
             PurchaseOrder order = open.get();
             out.append("<p class='order-pending'>").append(html(order.number())).append(" · ").append(order.status())
                     .append(" · ").append(order.outstanding()).append(" units outstanding</p><a class='button' href='/app?order=")
-                    .append(order.id()).append("#purchase-orders'>Review existing order</a>");
+                    .append(order.id()).append("#purchase-orders'>Continue reorder</a>");
+            if(actor.role()==com.inventory.security.Role.ADMIN && order.status()==OrderStatus.PENDING_APPROVAL && !order.createdBy().equals(actor.id())) out.append(actionForm(order,OrderAction.APPROVE,"Approve reorder request",csrf)).append(actionForm(order,OrderAction.REJECT,"Reject reorder request",csrf));
+            out.append("<p class='muted'>A reorder already exists for this product. Continue it to avoid ordering the same stock twice.</p>");
+            if(order.status()==OrderStatus.DRAFT) out.append(actionForm(order,OrderAction.SUBMIT,"Send reorder request to Admin",csrf));
+            if(actor.role()==com.inventory.security.Role.MANAGER && order.status()==OrderStatus.PENDING_APPROVAL) out.append("<p class='message success'>Request sent to Admin. Awaiting review.</p>");
         } else if (suggestion.offer() == null) {
             out.append("<p>No supplier quote is configured.</p><a class='button' href='#supplier-quotes'>Add supplier quote</a>");
         } else if (suggestion.suggestedQuantity() == 0) {
             out.append("<p>Review quantity limits before placing a new order.</p>");
+        } else if(actor.role()==com.inventory.security.Role.MANAGER) {
+            out.append("<form method='post' action='/purchase/create'>").append(hidden("csrf",csrf)).append(hidden("requestId",UUID.randomUUID().toString()))
+                .append(hidden("offerId",suggestion.offer().id().toString())).append(hidden("quantity",String.valueOf(suggestion.suggestedQuantity())))
+                .append(input("Request reason","note","text","Low stock: "+sku,"maxlength='2000'"))
+                .append("<p>Suggested quantity: ").append(suggestion.suggestedQuantity()).append(" units. Admin reviews the reorder request.</p><button>Send reorder request to Admin</button></form>");
         } else {
             out.append("<form method='post' action='/purchase/create'>").append(hidden("csrf", csrf)).append(hidden("requestId", fields.getOrDefault("requestId", UUID.randomUUID().toString())))
                     .append("<label>Supplier quote<select required name='offerId'>");
@@ -86,13 +110,14 @@ final class OperationsPage {
                             .append(offer.leadDays()).append(" days · min ").append(offer.minimumQuantity()).append("</option>"));
             out.append("</select></label>").append(input("Order quantity", "quantity", "number", fields.getOrDefault("quantity", String.valueOf(suggestion.suggestedQuantity())), "min='1' max='2147483647' step='1'"))
                     .append(input("Purchase reason", "note", "text", fields.getOrDefault("note", "Replenish " + sku), "maxlength='2000'"))
-                    .append("<small>Suggestion uses the lowest unit-cost quote. Review quantity if you choose another supplier.</small><button type='submit'>Create purchase order</button></form>");
+                    .append("<small>Suggestion uses the lowest unit-cost quote. Review quantity if you choose another supplier.</small><button type='submit'>"+(actor.role()==com.inventory.security.Role.MANAGER?"Send reorder request to Admin":"Reorder stock")+"</button></form>");
         }
         return out.append("</article>").toString();
     }
 
     private String orders(User actor, InventorySnapshot snapshot, Map<String, String> query, String csrf, Map<String, String> submitted, String action) {
-        StringBuilder out = new StringBuilder("<section id='purchase-orders' data-view='purchase-orders' class='panel ops-panel workspace-view'><div class='panel-title'><h2>Purchase orders</h2><p>Review purchase lines, approvals and deliveries.</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
+        boolean deliveryView=actor.role()==com.inventory.security.Role.ADMIN;
+        StringBuilder out = new StringBuilder("<section id='purchase-orders' data-view='purchase-orders' class='panel ops-panel workspace-view'><div class='panel-title'><h2>"+(deliveryView?"Deliveries":"Purchase orders")+"</h2><p>"+(deliveryView?"Track suppliers, expected dates and received quantities. Select an order for delivery details.":"Review purchase lines, approvals and deliveries.")+"</p></div><div class='table-wrap'><table><thead><tr><th>Order / product</th><th>Supplier</th><th>Status</th><th>Received / ordered</th><th>Total cost</th><th>Estimated due</th></tr></thead><tbody>");
         for (var order : snapshot.orders().reversed()) {
             out.append("<tr><td><a href='/app?order=").append(order.id()).append("#purchase-orders'>").append(order.number()).append("</a><small>")
                     .append(html(order.sku())).append("</small></td><td>").append(html(order.supplierName())).append("</td><td>").append(order.status())
@@ -113,12 +138,19 @@ final class OperationsPage {
         Map<String, String> fields = order.id().toString().equals(submitted.get("orderId")) && action.equals("/purchase/receive") ? submitted : Map.of();
         StringBuilder out = new StringBuilder("<div class='order-detail'><h3>" + order.number() + " · " + html(order.sku()) + "</h3><p>Created by "
                 + html(DemoData.actorName(order.createdBy())) + ". " + html(order.note()) + "</p><div class='order-actions'>");
-        if (order.status() == OrderStatus.DRAFT) out.append(actionForm(order, OrderAction.SUBMIT, "Submit for approval", csrf));
+        boolean deliveryView=actor.role()==com.inventory.security.Role.ADMIN;
+        if (order.status() == OrderStatus.DRAFT) {
+            out.append("<p>This reorder is still a draft. Submit it to start processing; stock changes when you receive the delivery.</p>");
+            out.append(actionForm(order, OrderAction.SUBMIT, "Submit reorder", csrf));
+        }
+        if(order.status()==OrderStatus.RECEIVED) out.append("<p class='message success'>Delivery complete. All ordered units have been added to stock.</p>");
+        if(order.status()==OrderStatus.CANCELLED || order.status()==OrderStatus.REJECTED) out.append("<p>This order is closed. Open <a href='#replenishment'>Replenishment</a> to reorder stock.</p>");
         if (order.status() == OrderStatus.PENDING_APPROVAL) {
             if (order.createdBy().equals(actor.id())) out.append("<p>Another Manager or Admin must review this order.</p>");
             else out.append(actionForm(order, OrderAction.APPROVE, "Approve order", csrf)).append(actionForm(order, OrderAction.REJECT, "Reject order", csrf));
         }
         if (order.status().isOpen() && order.receivedQuantity() == 0) out.append(actionForm(order, OrderAction.CANCEL, "Cancel order", csrf));
+        out.append("<p>Supplier: ").append(html(order.supplierName())).append(" · Expected: ").append(order.expectedOn()).append(" · Received: ").append(order.receivedQuantity()).append(" · Remaining: ").append(order.outstanding()).append("</p>");
         if (order.status() == OrderStatus.APPROVED || order.status() == OrderStatus.PARTIALLY_RECEIVED) {
             out.append("<form method='post' action='/purchase/receive'>").append(hidden("csrf", csrf)).append(hidden("orderId", order.id().toString()))
                     .append(hidden("requestId", fields.getOrDefault("requestId", UUID.randomUUID().toString())))

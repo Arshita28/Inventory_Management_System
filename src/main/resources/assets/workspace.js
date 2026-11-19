@@ -257,3 +257,15 @@ document.addEventListener('submit', event => {
     if (invalid) { event.preventDefault(); invalid.reportValidity(); }
 });
 document.querySelectorAll('input[data-value-type]').forEach(validateNumericField);
+
+const issueType = document.querySelector('#issue-type');
+function updateIssueType() {
+    const other = document.querySelector('#other-issue');
+    if (!issueType || !other) return;
+    const manual = issueType.value === 'Other';
+    document.querySelector('#other-issue-label').hidden = !manual;
+    other.required = manual;
+    other.disabled = !manual;
+}
+issueType?.addEventListener('change', updateIssueType);
+updateIssueType();

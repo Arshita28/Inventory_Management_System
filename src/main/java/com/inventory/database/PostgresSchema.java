@@ -21,6 +21,7 @@ public final class PostgresSchema {
                     s.execute("CREATE TABLE IF NOT EXISTS inventory_migrations(version INTEGER PRIMARY KEY, checksum VARCHAR(64) NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
                 }
                 apply(c,1,"/database/postgresql/V001__baseline.sql");
+                apply(c,2,"/database/V006__issues.sql");
                 c.commit();
             }catch(Exception e){c.rollback();throw e;}
         }catch(Exception e){throw new PersistenceException("Unable to migrate PostgreSQL storage",e);}

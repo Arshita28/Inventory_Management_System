@@ -33,7 +33,7 @@ final class BusinessPage {
             .append("<div id='sale-preview' class='sale-preview' aria-live='polite'></div>")
             .append("<p class='muted'>Check the items and quantities. Saving records the sale and updates stock.</p><button id='save-order'>Place order</button></form></section></div></section>")
             .append(section("sales","Customer invoices","View customer invoices and print a copy."))
-            .append("<section class='panel' id='order-history'><div class='panel-title'><div><h3>Customer invoices</h3><p>Select an invoice to view or print it.</p></div><a class='lime-link' href='#new-sale'>New order</a></div><div class='table-wrap'><table><thead><tr><th>Invoice</th><th>Customer</th><th>Total (INR)</th><th>Date</th></tr></thead><tbody>");
+            .append("<section class='panel' id='order-history'><div class='panel-title'><div><h3>Customer invoices</h3><p>Select an invoice to view or print it.</p></div></div><div class='table-wrap'><table><thead><tr><th>Invoice</th><th>Customer</th><th>Total (INR)</th><th>Date</th></tr></thead><tbody>");
         var invoices=service.invoices(actor);
         for(var invoice:invoices) out.append("<tr><td><a href='/app?invoice=").append(invoice.get("id")).append("#invoice-document'>").append(number(invoice)).append("</a></td><td>").append(html(invoice.get("customer"))).append("</td><td>").append(invoice.get("total")).append("</td><td>").append(date(invoice.get("created_at"))).append("</td></tr>");
         out.append("</tbody></table></div>").append(invoices.isEmpty()?"<p class='empty'>No orders yet. Your saved orders will appear here.</p>":"").append("</section>");
@@ -41,23 +41,10 @@ final class BusinessPage {
         var invoice=invoices.stream().filter(r->r.get("id").equals(selected)).findFirst().orElse(null);
         if(invoice!=null) {
             var lines=service.lines(actor,UUID.fromString(selected));
-            out.append("<section class='panel invoice-document' id='invoice-document'><div class='panel-title'><div><small>VOLTEDGE ELECTRONICS</small><h2>").append(number(invoice)).append("</h2><p>").append(html(invoice.get("customer"))).append(" · ").append(date(invoice.get("created_at"))).append("</p></div><button type='button' id='print-invoice' class='secondary'>Print invoice</button><a class='lime-link' href='#new-sale'>New order</a></div><table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th><th>Returned</th></tr></thead><tbody>");
-            for(var line:lines) out.append("<tr><td>").append(html(line.get("product_name"))).append("<small>").append(html(line.get("sku"))).append("</small></td><td>").append(line.get("quantity")).append("</td><td>").append(line.get("unit_price")).append("</td><td>").append(new java.math.BigDecimal(line.get("unit_price")).multiply(new java.math.BigDecimal(line.get("quantity")))).append("</td><td>").append(line.get("returned")).append("</td></tr>");
+            out.append("<section class='panel invoice-document' id='invoice-document'><div class='panel-title'><div><small>VOLTEDGE ELECTRONICS</small><h2>").append(number(invoice)).append("</h2><p>").append(html(invoice.get("customer"))).append(" · ").append(date(invoice.get("created_at"))).append("</p></div><button type='button' id='print-invoice' class='secondary'>Print invoice</button></div><table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>");
+            for(var line:lines) out.append("<tr><td>").append(html(line.get("product_name"))).append("<small>").append(html(line.get("sku"))).append("</small></td><td>").append(line.get("quantity")).append("</td><td>").append(line.get("unit_price")).append("</td><td>").append(new java.math.BigDecimal(line.get("unit_price")).multiply(new java.math.BigDecimal(line.get("quantity")))).append("</td></tr>");
             out.append("</tbody></table>");
             out.append("<div class='invoice-totals'><p>Subtotal <strong>INR ").append(invoice.get("subtotal")).append("</strong></p><p>Discount <strong>INR ").append(invoice.get("discount")).append("</strong></p><p>Total <strong>INR ").append(invoice.get("total")).append("</strong></p></div><p class='muted'>Sales invoice · Payment collection is recorded separately. No tax calculation is applied.</p></section>");
-            if(actor.role().allows(Permission.RECEIVE_STOCK)) {
-                out.append("<section class='panel'><h3>Return against ").append(number(invoice)).append("</h3>").append(form("return",csrf)).append(hidden("invoice",selected)).append("<label>Invoice line<select name='line'>");
-                for(var line:lines) out.append("<option value='").append(line.get("line_no")).append("'>").append(html(line.get("sku"))).append(" · ").append(Integer.parseInt(line.get("quantity"))-Integer.parseInt(line.get("returned"))).append(" returnable</option>");
-                out.append("</select></label>").append(input("Return quantity","quantity","number","1","min='1'"))
-                    .append("<label>Condition<select name='disposition'><option value='RESELLABLE'>Resellable — return to available stock</option><option value='DAMAGED'>Damaged — keep out of available stock</option></select></label>")
-                    .append(input("Reason","reason","text","","maxlength='2000'"))
-                    .append("<p class='muted'>Records the returned units. Refunds are handled separately.</p><button>Record return</button></form></section>");
-            }
-        }
-        if(actor.role().allows(Permission.RECEIVE_STOCK)) {
-            out.append("<section class='panel'><h3>Return register</h3><table><thead><tr><th>Invoice</th><th>Line</th><th>Quantity</th><th>Condition</th><th>Reason</th></tr></thead><tbody>");
-            for(var returned:service.returns(actor)) out.append("<tr><td><a href='/app?invoice=").append(returned.get("invoice_id")).append("#sales'>View invoice</a></td><td>").append(returned.get("line_no")).append("</td><td>").append(returned.get("quantity")).append("</td><td>").append(html(returned.get("disposition"))).append("</td><td>").append(html(returned.get("reason"))).append("</td></tr>");
-            out.append("</tbody></table></section>");
         }
         out.append("</section>");
         if(actor.role().allows(Permission.MANAGE_PRODUCTS)) {
@@ -76,7 +63,7 @@ final class BusinessPage {
             out.append("</section></div></section>");
         }
         if(actor.role().allows(Permission.MANAGE_PURCHASES)) {
-            out.append(section("purchase-batches","Purchase documents","Order several products from one supplier. Submit and review all lines together."));
+            out.append(section("purchase-batches","Purchase orders","Order several products from one supplier. Submit and review all lines together."));
             out.append("<section class='panel'><h3>New purchase order</h3>").append(form("purchase-batch",csrf));
             var offers=service.offers(actor);
             for(int i=0;i<5;i++) {
@@ -121,6 +108,22 @@ final class BusinessPage {
             .append("<section class='panel'><h3>Database backup</h3><p>Includes inventory, invoices, orders, account password hashes and audit records. Store the file privately.</p><a class='button' href='/export/backup.sql'>Download backup</a><h3>Restore a backup</h3><p>Stop the server, then run the following command with your backup file. The restore creates a separate database and refuses to overwrite an existing one.</p><pre>java -jar target/inventory-management-system-0.1.0-SNAPSHOT.jar \\\n  --restore=/path/to/backup.sql --database=data/restored</pre><p>Start the restored workspace using <code>--serve --database=data/restored --port=8081</code>.</p></section></section>");
         if(actor.role().allows(Permission.MANAGE_USERS) && !service.supportsSqlBackup()) out.append(section("backup","Backup & recovery","PostgreSQL backups are managed outside the application."))
             .append("<section class='panel'><h3>Cloud backups</h3><p>Use your database provider’s backup and restore tools or pg_dump. Test recovery into a separate database before changing the production connection.</p><p>Local H2 SQL downloads cannot restore a PostgreSQL database.</p></section></section>");
+        if(actor.role()!=Role.ADMIN) {
+        out.append(section("contact-manager",actor.role()==Role.STAFF?"Contact manager":"Reported issues","Report a problem and track its status here."));
+        if(actor.role()==Role.STAFF) out.append("<section class='panel'><h3>Report an issue</h3>").append(form("report-issue",csrf))
+            .append("<label>Issue type<select required name='subject' id='issue-type'><option value=''>Choose an issue</option><option>Stock quantity mismatch</option><option>Product unavailable</option><option>Damaged product</option><option>Incorrect price</option><option>Invoice or checkout problem</option><option>Technical problem</option><option value='Other'>Other</option></select></label>")
+            .append("<label id='other-issue-label'>Other issue<input name='otherSubject' id='other-issue' maxlength='255' placeholder='Describe the issue briefly'></label>")
+            .append("<label>Additional details (optional)<textarea name='description' maxlength='2000' rows='5' placeholder='Describe the problem and the product or invoice involved.'></textarea></label><button>Send issue report</button></form></section>");
+        out.append("<section class='panel'><h3>Issue reports</h3>");
+        var issues=service.issues(actor);
+        if(issues.isEmpty()) out.append("<p>No issues reported yet.</p>");
+        for(var issue:issues) {
+            out.append("<article class='register-row'><h3>").append(html(issue.get("subject"))).append("</h3><p>").append(html(issue.get("description"))).append("</p><small>").append(html(issue.get("reporter_name"))).append(" · ").append(date(issue.get("created_at"))).append(" · ").append(html(issue.get("status"))).append("</small>");
+            if(actor.role()!=Role.STAFF && issue.get("status").equals("OPEN")) out.append(form("resolve-issue",csrf)).append(hidden("issueId",issue.get("id"))).append("<button>Mark resolved</button></form>");
+            out.append("</article>");
+        }
+        out.append("</section></section>");
+        }
         return restoreForm(out.toString(),submitted,action);
     }
     private static String restoreForm(String page,Map<String,String> submitted,String action) {

@@ -123,6 +123,7 @@ class LocalPreviewServerTest {
 
     @Test
     void productReceiptSaleAndEditWorkThroughHttp() throws Exception {
+        server.close();server=new LocalPreviewServer(inventory,new com.inventory.security.User(UUID.randomUUID(),"admin",com.inventory.security.Role.ADMIN,true),0);server.start();
         assertEquals(303, post("/products/create", Map.of("sku", "NEW", "name", "New item", "category", "STORAGE",
                 "price", "25.50", "reorderLevel", "2", "capacityGb", "128", "storageInterface", "USB-C", "supportedDevices", "Laptop")).statusCode());
         UUID receipt = UUID.randomUUID();
@@ -168,6 +169,7 @@ class LocalPreviewServerTest {
 
     @Test
     void rejectsForgedFormsAndInvalidInput() throws Exception {
+        server.close();server=new LocalPreviewServer(inventory,new com.inventory.security.User(UUID.randomUUID(),"admin",com.inventory.security.Role.ADMIN,true),0);server.start();
         assertEquals(403, rawPost("/stock/receive", "csrf=invalid&sku=VE-CHG-001&quantity=10").statusCode());
         var response = post("/products/create", Map.of("sku", "NEW", "name", "Keep my input", "category", "CHARGING",
                 "price", "1.001", "reorderLevel", "2", "connector", "USB-C", "wattage", "65", "compatibility", "Laptops"));
@@ -226,6 +228,7 @@ class LocalPreviewServerTest {
 
     @Test
     void categoryPickerShowsOnlyRelevantCreateFields() throws Exception {
+        server.close();server=new LocalPreviewServer(inventory,new com.inventory.security.User(UUID.randomUUID(),"admin",com.inventory.security.Role.ADMIN,true),0);server.start();
         String page = get("/?newCategory=STORAGE").body();
         String createForm = page.substring(page.indexOf("<form class='product-form'"));
         createForm = createForm.substring(0, createForm.indexOf("</form>"));
@@ -238,6 +241,7 @@ class LocalPreviewServerTest {
 
     @Test
     void invalidCategoryOrMissingSpecificationsCannotCreateProduct() throws Exception {
+        server.close();server=new LocalPreviewServer(inventory,new com.inventory.security.User(UUID.randomUUID(),"admin",com.inventory.security.Role.ADMIN,true),0);server.start();
         Map<String, String> common = Map.of("sku", "BAD", "name", "Missing specs", "category", "STORAGE",
                 "price", "100", "reorderLevel", "1");
         assertEquals(422, post("/products/create", common).statusCode());
@@ -293,7 +297,7 @@ class LocalPreviewServerTest {
                 .filter(value -> value.sku().equals("VE-CHG-001")).findFirst().orElseThrow();
         UUID id = UUID.randomUUID();
         assertEquals(303, post("/purchase/create", Map.of("requestId", id.toString(), "offerId", offer.id().toString(), "quantity", "5", "note", "Restock chargers")).statusCode());
-        assertEquals(303, post("/purchase/action", Map.of("orderId", id.toString(), "action", "SUBMIT", "note", "Ready for review")).statusCode());
+        assertEquals(com.inventory.model.procurement.OrderStatus.PENDING_APPROVAL, inventory.operations().snapshot(DemoData.MANAGER).orders().stream().filter(order -> order.id().equals(id)).findFirst().orElseThrow().status());
         assertEquals(409, post("/purchase/action", Map.of("orderId", id.toString(), "action", "APPROVE", "note", "Own approval")).statusCode());
         assertEquals(4, inventory.getStock(DemoData.MANAGER, "VE-CHG-001").quantity());
         server.close();
@@ -337,7 +341,7 @@ class LocalPreviewServerTest {
         String page = get("/app").body();
         assertTrue(page.contains("threshold-based fallback"));
         assertTrue(page.contains("not acquisition cost"));
-        assertTrue(page.contains("Create purchase order"));
+        assertTrue(page.contains("Send reorder request to Admin"));
     }
 
     private HttpResponse<String> get(String path) throws Exception {

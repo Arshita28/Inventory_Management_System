@@ -271,6 +271,7 @@ public final class JdbcInventoryRepository implements InventoryRepository {
             executeScript(connection, "/database/V002__electronics_details.sql");
             executeScript(connection, "/database/V003__procurement.sql");
             executeScript(connection, "/database/V005__business.sql");
+            executeScript(connection, "/database/V006__issues.sql");
             java.util.List<String> checks = new java.util.ArrayList<>();
             try (var query = connection.prepareStatement("SELECT tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc ON tc.CONSTRAINT_NAME=cc.CONSTRAINT_NAME AND tc.CONSTRAINT_SCHEMA=cc.CONSTRAINT_SCHEMA WHERE tc.TABLE_NAME='STOCK_MOVEMENTS'"); var rows=query.executeQuery()) {
                 while(rows.next()) if(rows.getString(2).contains("MOVEMENT_TYPE")) checks.add(rows.getString(1));
