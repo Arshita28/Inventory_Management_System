@@ -12,4 +12,4 @@ COPY --from=build --chown=inventory:inventory /build/target/inventory-management
 USER inventory
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/inventory.jar"]
-CMD ["--serve"]
+CMD ["--serve","--demo-personas"]
