@@ -72,7 +72,7 @@ public final class LocalPreviewServer implements AutoCloseable {
     }
 
     public LocalPreviewServer(InventoryService inventory,AccessService access,int port,ServerSettings settings) throws IOException {
-        this(inventory,null,port,false,java.util.Objects.requireNonNull(access),false,settings);
+        this(inventory,null,port,false,java.util.Objects.requireNonNull(access),true,settings);
     }
 
     private LocalPreviewServer(InventoryService inventory, User viewer, int port, boolean demoSwitch, AccessService access, boolean personasEnabled) throws IOException {
