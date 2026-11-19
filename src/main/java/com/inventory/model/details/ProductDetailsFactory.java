@@ -9,10 +9,10 @@ public final class ProductDetailsFactory {
 
     public static ProductDetails create(ProductCategory category, Map<String, String> fields) {
         return switch (category) {
-            case CHARGING -> new ChargingDetails(text(fields, "connector"), number(fields, "wattage"), text(fields, "compatibility"));
+            case CHARGING -> new ChargingDetails(fields.getOrDefault("connector", ""), fields.containsKey("wattage") ? number(fields, "wattage") : 0, fields.getOrDefault("compatibility", ""));
             case AUDIO -> new AudioDetails(AudioDetails.Connection.valueOf(text(fields, "connection")),
                     bool(fields, "microphone"), number(fields, "batteryHours"));
-            case COMPUTER_ACCESSORIES -> new ComputerAccessoryDetails(text(fields, "accessoryType"), text(fields, "connection"), text(fields, "supportedOs"));
+            case COMPUTER_ACCESSORIES -> new ComputerAccessoryDetails(text(fields, "accessoryType"), fields.getOrDefault("connection", ""), fields.getOrDefault("supportedOs", ""));
             case STORAGE -> new StorageDetails(number(fields, "capacityGb"), text(fields, "storageInterface"), text(fields, "supportedDevices"));
             case PHONE_ACCESSORIES -> new PhoneAccessoryDetails(PhoneAccessoryDetails.Type.valueOf(text(fields, "accessoryType")),
                     bool(fields, "universal"), fields.getOrDefault("supportedModels", ""));

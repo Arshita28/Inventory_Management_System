@@ -48,8 +48,11 @@ final class InventoryPage {
                   String action, String error, String csrf, boolean demoSwitch) {
         List<StockSummary> catalogue = inventory.listProducts(viewer);
         StockSummary requested = query.containsKey("sku") ? inventory.getStock(viewer, query.get("sku")) : null;
+        if(viewer.role()==com.inventory.security.Role.STAFF && requested!=null && requested.product().details().category()==ProductCategory.LEGACY) requested=null;
         String scope = query.getOrDefault("scope", requested != null && requested.product().details().category() == ProductCategory.LEGACY ? "legacy" : "electronics");
-        List<StockSummary> all = catalogue.stream().filter(stock -> switch (scope) {
+        if(viewer.role()==com.inventory.security.Role.STAFF) scope="electronics";
+        final String catalogueScope=scope;
+        List<StockSummary> all = catalogue.stream().filter(stock -> switch (catalogueScope) {
             case "all" -> true;
             case "legacy" -> stock.product().details().category() == ProductCategory.LEGACY;
             default -> stock.product().details().category() != ProductCategory.LEGACY;
@@ -85,14 +88,20 @@ final class InventoryPage {
         var operationsView = operations.render(viewer, query, csrf, submitted, action);
         values.put("operations", operationsView.content());
         values.put("business", new BusinessPage(inventory).render(viewer, csrf, query, submitted, action));
-        if(!viewer.role().allows(Permission.VIEW_ANALYTICS)) values.put("operations","<section class='workspace-view panel staff-dashboard' id='dashboard' data-view='dashboard'><div class='panel-title'><h1>Dashboard</h1><p>Manage stock availability and record customer sales.</p></div><div class='staff-actions'><a class='button' href='#management'>View inventory</a>"+(inventory.business()!=null?"<a class='button' href='#sales'>New sale</a>":"")+"</div></section>");
         String box="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10";
         String order="M7 3h10v4H7zM7 5H4v16h16V5h-3M8 12h8M8 16h5";
-        StringBuilder navigation=new StringBuilder(navItem("dashboard","Dashboard","M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"));
+        StringBuilder navigation=new StringBuilder();
+        if(viewer.role().allows(Permission.VIEW_ANALYTICS)) navigation.append(navItem("dashboard","Dashboard","M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"));
         String inventoryLinks=navItem("management","Product catalogue",box);
         if(viewer.role().allows(Permission.MANAGE_PRODUCTS)) inventoryLinks+=navItem("add-product","Add product",box)+(inventory.business()!=null?navItem("stocktaking","Stocktaking",order):"");
-        navigation.append(navGroup("Inventory",box,inventoryLinks));
-        if(inventory.business()!=null) navigation.append(navGroup("Sales","M3 4h3l3 12h10l2-8H7M10 21h.01M18 21h.01",navItem("sales","Invoices & returns",order)+navItem("new-sale","New sale",order)));
+        if(viewer.role()==com.inventory.security.Role.STAFF && inventory.business()!=null) {
+            navigation.append(navItem("new-sale","New customer order",order));
+            navigation.append(navItem("order-history","Order history",order));
+            navigation.append(navItem("management","Product catalogue",box));
+        } else {
+            navigation.append(navGroup("Inventory",box,inventoryLinks));
+            if(inventory.business()!=null) navigation.append(navGroup("Sales","M3 4h3l3 12h10l2-8H7M10 21h.01M18 21h.01",navItem("sales","Invoices & returns",order)+navItem("new-sale","New sale",order)));
+        }
         if(viewer.role().allows(Permission.VIEW_ANALYTICS)) {
             String purchases=(inventory.business()!=null?navItem("purchase-batches","Purchase orders",order):"")+navItem("purchase-orders","Approvals & deliveries",order)+navItem("replenishment","Replenishment",box);
             navigation.append(navGroup("Purchasing",order,purchases));
@@ -100,18 +109,19 @@ final class InventoryPage {
             navigation.append(navGroup("Reports","M4 3v18h17M8 16v-4M13 16V8M18 16V5",navItem("analytics","Sales & inventory",order)));
         }
         if(access!=null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navItem("users","Staff & access","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8"));
-        if(inventory.business()!=null && viewer.role().allows(Permission.MANAGE_USERS)) navigation.append(navGroup("Settings","M4 4h16v16H4zM8 4v6h8V4M8 20v-6h8v6",navItem("backup","Backup & recovery",order)));
         navigation.append(navItem("help","Help & guide","M9 9a3 3 0 1 1 6 0c0 2-3 2-3 4M12 17h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20"));
         values.put("accountName",html(viewer.username()));
         values.put("accountInitials",html(viewer.username().substring(viewer.username().lastIndexOf('.')+1).substring(0,Math.min(2,viewer.username().length()-viewer.username().lastIndexOf('.')-1)).toUpperCase(Locale.ROOT)));
         values.put("navigation", navigation.toString());
-        values.put("initialView", initialView(query, action));
+        String initial=initialView(query,action);
+        if(initial.equals("dashboard") && !viewer.role().allows(Permission.VIEW_ANALYTICS)) initial=inventory.business()!=null?"new-sale":"management";
+        values.put("initialView",initial);
         values.put("rows", productRows(products, query));
         values.put("selectedName", selected == null ? "Select a product" : html(selected.product().name()));
         values.put("selectedSku", selected == null ? "" : html(selected.product().sku()));
         values.put("history", history(viewer, selected));
         values.put("selectedDetails", selected == null ? "" : html(selected.product().details().summary()));
-        values.put("filters", filters(all, search, category, status, scope));
+        values.put("filters", filters(all, search, category, status, scope, viewer.role()!=com.inventory.security.Role.STAFF));
         values.put("resultCount", "Showing " + products.size() + " of " + all.size() + " products");
         values.put("stockForms", stockForms(viewer, selected, csrf, submitted, action));
         values.put("productForms", productForms(viewer, selected, csrf, submitted, action, query));
@@ -147,7 +157,8 @@ final class InventoryPage {
     private static String initialView(Map<String, String> query, String action) {
         if(action.startsWith("/business/purchase")) return "purchase-batches";
         if(action.startsWith("/business/count")) return "stocktaking";
-        if(action.equals("/business/checkout") || action.equals("/business/return") || query.containsKey("invoice")) return "sales";
+        if(action.equals("/business/checkout")) return "new-sale";
+        if(action.equals("/business/return") || query.containsKey("invoice")) return "sales";
         if(action.equals("/business/supplier") || action.equals("/business/quote")) return "supplier-directory";
         if (action.startsWith("/users/") || "users".equals(query.get("notice"))) return "users";
         if (action.equals("/purchase/create")) return "replenishment";
@@ -201,13 +212,17 @@ final class InventoryPage {
         return history.isEmpty() ? "<li class='empty'>No stock movements to show.</li>" : history.toString();
     }
 
-    private String filters(List<StockSummary> all, String search, String category, String status, String scope) {
+    private String filters(List<StockSummary> all, String search, String category, String status, String scope, boolean showLegacy) {
         StringBuilder form = new StringBuilder("<form method='get' action='/app' class='filters'>");
         form.append("<input aria-label='Search products' name='q' placeholder='Search name, SKU or specs' maxlength='255' value='")
-                .append(html(search)).append("'><select aria-label='Catalogue view' name='scope'>")
-                .append(option("electronics", "Electronics catalogue", scope)).append(option("legacy", "Legacy records", scope))
-                .append(option("all", "All records", scope))
-                .append("</select><select aria-label='Category filter' name='category'><option value=''>All categories</option>");
+                .append(html(search)).append("'>");
+        if(showLegacy) {
+            form.append("<select aria-label='Catalogue view' name='scope'>")
+                    .append(option("electronics","Electronics catalogue",scope))
+                    .append(option("legacy","Legacy records",scope))
+                    .append(option("all","All records",scope)).append("</select>");
+        }
+        form.append("<select aria-label='Category filter' name='category'><option value=''>All categories</option>");
         all.stream().map(stock -> stock.product().category()).distinct().sorted().forEach(value ->
                 form.append(option(value, value, category)));
         form.append("</select><select aria-label='Stock status' name='status'>")
@@ -246,7 +261,7 @@ final class InventoryPage {
         if (!viewer.role().allows(Permission.MANAGE_PRODUCTS)) {
             return "";
         }
-        StringBuilder forms = new StringBuilder("<section id='add-product' class='panel product-panel'><div class='panel-title'><h2>Add product</h2><p>Choose a category first, enter its specifications, then record opening stock.</p></div>");
+        StringBuilder forms = new StringBuilder("<section id='add-product' class='panel product-panel'><div class='panel-title'><h2>Add product</h2><p>Choose a category, enter the product information, then record opening stock.</p></div>");
         Map<String, String> fields = action.equals("/products/create") ? submitted : Map.of();
         ProductCategory createCategory = chosenCategory(fields.getOrDefault("category", query.getOrDefault("newCategory", "CHARGING")), ProductCategory.CHARGING);
         if (createCategory == ProductCategory.LEGACY) {
@@ -256,8 +271,10 @@ final class InventoryPage {
         forms.append("<form class='product-form' method='post' action='/products/create'>").append(hidden("csrf", csrf))
                 .append(hidden("category", createCategory.name()))
                 .append("<div class='form-grid'>").append(input("SKU", "sku", "text", fields.getOrDefault("sku", ""), "maxlength='40'"))
-                .append(catalogueFields(fields)).append("</div><h3 class='spec-heading'>").append(createCategory.label()).append(" specifications</h3><div class='form-grid'>")
-                .append(ElectronicsFields.render(createCategory, fields)).append("</div><div class='form-actions'><button type='submit'>Create product</button></div></form></section>");
+                .append(catalogueFields(fields)).append("</div>")
+                .append((createCategory == ProductCategory.COMPUTER_ACCESSORIES || createCategory == ProductCategory.CHARGING) ? "" : "<h3 class='spec-heading'>" + createCategory.label() + " specifications</h3>")
+                .append("<div class='form-grid'>")
+                .append(createCategory == ProductCategory.CHARGING ? "" : ElectronicsFields.render(createCategory, fields)).append("</div><div class='form-actions'><button type='submit'>Create product</button></div></form></section>");
         if (selected != null) {
             Product product = selected.product();
             Map<String, String> defaults = new HashMap<>(product.details().attributes());

@@ -36,8 +36,18 @@ class ProductDetailsTest {
         assertThrows(IllegalArgumentException.class, () -> new ChargingDetails("USB-C", 0, "Laptop"));
         assertThrows(IllegalArgumentException.class, () -> new ChargingDetails(" ", 65, "Laptop"));
         assertThrows(IllegalArgumentException.class, () -> new StorageDetails(-1, "USB", "Laptop"));
-        assertThrows(IllegalArgumentException.class, () -> new ComputerAccessoryDetails("Mouse", "USB", ""));
+        assertThrows(IllegalArgumentException.class, () -> new ComputerAccessoryDetails("", "USB", ""));
         assertThrows(IllegalArgumentException.class, () -> new StorageDetails(512, "x".repeat(256), "Laptop"));
+    }
+
+    @Test
+    void monitorCanBeCreatedWithoutOperatingSystemOrConnection() {
+        ProductDetails monitor = ProductDetailsFactory.create(ProductCategory.COMPUTER_ACCESSORIES,
+                Map.of("accessoryType", "Monitor"));
+        assertEquals("Monitor", monitor.summary());
+        assertEquals(monitor, ProductDetailsFactory.create(monitor.category(), monitor.attributes()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ComputerAccessoryDetails("Monitor", "x".repeat(256), ""));
     }
 
     @Test
@@ -65,7 +75,9 @@ class ProductDetailsTest {
 
     @Test
     void factoryRejectsMissingMalformedAndLegacyDetails() {
-        assertThrows(IllegalArgumentException.class, () -> ProductDetailsFactory.create(ProductCategory.CHARGING, Map.of()));
+        ProductDetails charging = ProductDetailsFactory.create(ProductCategory.CHARGING, Map.of());
+        assertEquals("Charging", charging.summary());
+        assertEquals(charging, ProductDetailsFactory.create(charging.category(), charging.attributes()));
         assertThrows(IllegalArgumentException.class, () -> ProductDetailsFactory.create(ProductCategory.LEGACY, Map.of()));
         assertThrows(IllegalArgumentException.class, () -> ProductDetailsFactory.create(ProductCategory.AUDIO,
                 Map.of("connection", "WIRED", "microphone", "yes", "batteryHours", "0")));

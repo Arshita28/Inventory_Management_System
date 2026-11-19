@@ -36,6 +36,22 @@ class BusinessServerTest {
         return client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+server.port()+path)).header("Content-Type","application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString());
     }
     String csrf()throws Exception {var m=Pattern.compile("name='csrf' value='([^']+)'").matcher(get("/app").body());assertTrue(m.find());return m.group(1);}
+    @Test void staffOnlySeesElectronicsInCatalogueAndSaleChoices() throws Exception {
+        inventory.addProduct(manager,new Product("PEN","Blue pen","Stationery",new BigDecimal("10"),1,true));
+        server.close();
+        server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"staff",Role.STAFF,true),0);
+        server.start();
+        for(String path:List.of("/app","/app?scope=all","/app?scope=legacy&sku=PEN")) {
+            String page=get(path).body();
+            assertTrue(page.contains("USB charger"));
+            assertFalse(page.contains("data-nav='dashboard'"));
+            assertFalse(page.contains("data-view='dashboard'"));
+            assertTrue(page.contains("data-initial-view=\""+(path.equals("/app")?"new-sale":"management")+"\""));
+            assertFalse(page.contains("Blue pen"));
+            assertFalse(page.contains("Legacy records"));
+            assertFalse(page.contains("value='PEN'"));
+        }
+    }
     @Test void invoiceFormsSaveAndErrorsPreserveEnteredLines()throws Exception {
         String initial=get("/app").body();
         assertFalse(initial.contains("data-nav='serials'"));
@@ -45,10 +61,33 @@ class BusinessServerTest {
         var fields=new HashMap<>(Map.of("csrf",token,"requestId",id.toString(),"customer","Buyer <One>","discount","0","sku0","A","qty0","11","serials0",""));
         var rejected=post("/business/checkout",fields);assertEquals(409,rejected.statusCode());
         assertTrue(rejected.body().contains("Buyer &lt;One&gt;"));assertTrue(rejected.body().contains("value='11'"));
-        assertTrue(rejected.body().contains("data-initial-view=\"sales\""));
+        assertTrue(rejected.body().contains("data-initial-view=\"new-sale\""));
         fields.put("qty0","2");assertEquals(303,post("/business/checkout",fields).statusCode());
         var invoice=get("/app?invoice="+id);assertEquals(200,invoice.statusCode());assertTrue(invoice.body().contains("INV-000001"));assertTrue(invoice.body().contains("200.00"));
         assertEquals(8,inventory.getStock(manager,"A").quantity());
+    }
+    @Test void staffCheckoutOpensSavedInvoiceAndKeepsOrderHistory() throws Exception {
+        inventory.addProduct(manager,new Product("B","Spare charger",new BigDecimal("50"),1,true,new ChargingDetails("USB-C",10,"USB PD")));
+        inventory.receiveStock(manager,UUID.randomUUID(),"B",5,"Opening");
+        server.close();server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"staff",Role.STAFF,true),0);server.start();
+        String page=get("/app").body();
+        assertTrue(page.contains("data-initial-view=\"new-sale\""));
+        assertTrue(page.contains("data-nav='order-history'"));
+        assertTrue(page.contains("id='cart-search'"));
+        String id=UUID.randomUUID().toString();
+        var fields=Map.of("csrf",csrf(),"requestId",id,"customer","Counter buyer","discount","10.00","sku0","A","qty0","2","sku1","B","qty1","3");
+        var saved=post("/business/checkout",fields);
+        assertEquals(303,saved.statusCode());
+        assertEquals("/app?invoice="+id+"&notice=invoice#invoice-document",saved.headers().firstValue("Location").orElseThrow());
+        assertEquals(303,post("/business/checkout",fields).statusCode());
+        assertEquals(8,inventory.getStock(manager,"A").quantity());
+        assertEquals(2,inventory.getStock(manager,"B").quantity());
+        assertEquals(1,inventory.business().invoices(manager).size());
+        String invoice=get("/app?invoice="+id).body();
+        assertTrue(invoice.contains("Counter buyer"));
+        assertTrue(invoice.contains("INR 340.00"));
+        assertTrue(invoice.contains("id='invoice-document'"));
+        assertTrue(invoice.contains("id='print-invoice'"));
     }
     @Test void javaRejectsInvalidIntegerAndMoneyInputWithoutChangingStock() throws Exception {
         String token=csrf();
@@ -68,7 +107,7 @@ class BusinessServerTest {
     }
     @Test void staffCannotAccessBackupOrWriteManagementWorkflows()throws Exception {
         server.close();server=new LocalPreviewServer(inventory,new User(UUID.randomUUID(),"staff",Role.STAFF,true),0);server.start();
-        String page=get("/app").body();assertTrue(page.contains("data-nav='sales'"));assertFalse(page.contains("data-nav='stocktaking'"));assertFalse(page.contains("data-nav='backup'"));
+        String page=get("/app").body();assertTrue(page.contains("data-nav='new-sale'"));assertFalse(page.contains("data-nav='stocktaking'"));assertFalse(page.contains("data-nav='backup'"));
         assertEquals(403,get("/export/backup.sql").statusCode());
         assertEquals(403,post("/business/count",Map.of("csrf",csrf(),"requestId",UUID.randomUUID().toString(),"sku","A","counted","1","reason","Count")).statusCode());
         assertEquals(403,post("/business/checkout",Map.of("csrf","invalid")).statusCode());

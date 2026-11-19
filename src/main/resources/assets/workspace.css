@@ -408,3 +408,40 @@
 }
 .workspace .sidebar-toggle {width:36px;flex:0 0 36px;padding:8px;}
 .workspace .sidebar-toggle>svg {width:20px;height:20px;}
+
+.workspace .sidebar .brand-logo {width:48px;height:48px;flex:0 0 48px;object-fit:contain;border-radius:9px;background:#ebebeb;}
+@media(max-width:640px){.workspace .sidebar .brand{margin-left:0;margin-right:0;justify-content:center;}.workspace .sidebar .brand-logo{width:40px;height:40px;flex-basis:40px;}}
+.workspace .sidebar .brand-logo {background:transparent;border-radius:0;}
+
+/* Counter checkout: browse products, review a cart, then issue an invoice. */
+.workspace .checkout-layout {display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,1fr);gap:22px;align-items:start;margin-bottom:24px;}
+.workspace .checkout-products {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px;max-height:680px;overflow:auto;}
+.workspace .checkout-product {display:flex;flex-direction:column;gap:8px;border:1px solid #3b3e40;border-radius:12px;padding:18px;background:#26292b;}
+.workspace .checkout-product h4 {margin:0;font-size:16px;line-height:1.4;}
+.workspace .checkout-product>small {color:#c7e780;font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
+.workspace .checkout-product>strong {font-size:18px;margin-top:6px;}
+.workspace .checkout-product>button {margin-top:auto;}
+.workspace .checkout-product[hidden],.workspace .product-picker[hidden],.workspace [hidden] {display:none!important;}
+.workspace .cart-panel {position:sticky;top:16px;}
+.workspace .cart-panel .sale-line {display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:18px 0;border-bottom:1px solid #3b3e40;}
+.workspace .cart-panel .cart-product-label {grid-column:1/-1;display:flex;flex-direction:column;gap:6px;}
+.workspace .cart-product-label strong {font-size:14px;color:#f2f2ec;}
+.workspace .cart-product-label small {font-size:12px;color:#b5b8ad;}
+.workspace .cart-quantity {display:inline-flex;align-items:center;gap:0;}
+.workspace .cart-quantity input {width:62px;text-align:center;border-radius:0;margin:0;appearance:textfield;-moz-appearance:textfield;}
+.workspace .cart-quantity input::-webkit-inner-spin-button {appearance:none;}
+.workspace .cart-quantity button {min-width:40px;min-height:44px;font-size:20px;padding:6px;border-radius:6px;}
+.workspace .cart-panel .remove-line {grid-column:2;grid-row:2;min-height:36px;padding:6px 10px;}
+.workspace .cart-line-total {grid-column:1/-1;text-align:right;}
+.workspace .cart-discount {padding:12px 0;}
+.workspace .cart-discount summary {cursor:pointer;margin-bottom:10px;color:#c7e780;}
+.workspace #cart-status:empty {display:none;}
+.workspace #cart-status {font-size:12px;color:#c7e780;}
+.workspace #save-order {width:100%;min-height:48px;}
+.workspace button:disabled {opacity:.45;cursor:not-allowed;}
+.workspace #order-history {margin:24px 0;}
+@media(max-width:1000px){.workspace .checkout-layout{grid-template-columns:1fr;}.workspace .cart-panel{position:static;}.workspace .checkout-products{max-height:480px;}}
+@media(max-width:520px){.workspace .checkout-products{grid-template-columns:1fr;}}
+
+.workspace .cart-panel .sale-line button {margin-top:0;}
+@media print {.workspace .invoice-document .lime-link {display:none!important;}}

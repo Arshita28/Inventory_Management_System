@@ -165,6 +165,7 @@ public final class LocalPreviewServer implements AutoCloseable {
                 case "/assets/workspace.css" -> respondResource(exchange, "/assets/workspace.css", "text/css; charset=utf-8");
                 case "/assets/workspace.js" -> respondResource(exchange, "/assets/workspace.js", "text/javascript; charset=utf-8");
                 case "/assets/dashboard.css" -> respondResource(exchange, "/assets/dashboard.css", "text/css; charset=utf-8");
+                case "/assets/voltedge-logo.svg" -> respondResource(exchange, "/assets/voltedge-logo.svg", "image/svg+xml");
                 case "/assets/conveyor-hero.png" -> respondResource(exchange, "/assets/conveyor-hero.png", "image/png");
                 case "/api/inventory" -> respond(exchange, 200, "application/json", inventoryJson(actor));
                 case "/export/inventory.csv" -> {
@@ -407,7 +408,7 @@ public final class LocalPreviewServer implements AutoCloseable {
             } else user = access.login(fields.getOrDefault("username", ""), password, role);
             access.sessions().invalidate(sessionCookie(exchange));
             setSession(exchange, access.sessions().create(user.id()));
-            redirect(exchange, "/app#home");
+            redirect(exchange, user.role()==Role.STAFF?"/app#new-sale":"/app#dashboard");
         } catch (AccessDeniedException exception) {
             landing(exchange, Map.of(), AccessService.LOGIN_ERROR, fields.getOrDefault("username", ""), fields.getOrDefault("role", "ADMIN"), true);
         } catch (IllegalArgumentException exception) {
@@ -435,7 +436,7 @@ public final class LocalPreviewServer implements AutoCloseable {
                 java.util.List<com.inventory.service.BusinessService.SaleLine> lines=new java.util.ArrayList<>();
                 for(int i=0;i<20;i++) if(fields.containsKey("sku"+i)) lines.add(new com.inventory.service.BusinessService.SaleLine(required(fields,"sku"+i),integer(fields,"qty"+i)));
                 business.checkout(actor,id,required(fields,"customer"),decimal(fields,"discount"),lines);
-                return "/app?invoice="+id+"&notice=invoice#sales";
+                return "/app?invoice="+id+"&notice=invoice#invoice-document";
             }
             case "/business/return" -> { business.returnSale(actor,id,UUID.fromString(required(fields,"invoice")),integer(fields,"line"),integer(fields,"quantity"),required(fields,"disposition"),required(fields,"reason")); return "/app?invoice="+required(fields,"invoice")+"&notice=return#sales"; }
             case "/business/count" -> business.count(actor,id,Product.normalizeSku(required(fields,"sku")),integer(fields,"counted"),required(fields,"reason"));

@@ -14,24 +14,34 @@ final class BusinessPage {
     BusinessPage(InventoryService inventory) { this.inventory=inventory;this.service=inventory.business(); }
     String render(User actor,String csrf,Map<String,String> query,Map<String,String> submitted,String action) {
         if(service==null) return "";
-        String options=inventory.listProducts(actor).stream().filter(s->s.product().active()).map(s->"<option data-price='"+s.product().sellingPrice()+"' value='"+html(s.product().sku())+"'>"+html(s.product().sku()+" · "+s.product().name())+" ("+s.quantity()+" available)</option>").collect(java.util.stream.Collectors.joining());
-        StringBuilder out=new StringBuilder(section("sales","Sales","Create invoices and review recorded sales."));
-        out.append("<div class='business-grid'><section class='panel' id='new-sale'><h3>New invoice</h3>").append(form("checkout",csrf))
-            .append(input("Customer / reference","customer","text","Walk-in customer","maxlength='255'"))
-            .append("<div id='sale-lines'><div class='sale-line'><label>Product<select required name='sku0'>").append(options).append("</select></label>")
+        String options=inventory.listProducts(actor).stream().filter(s->s.product().active() && s.product().details().category()!=com.inventory.model.ProductCategory.LEGACY).map(s->"<option data-stock='"+s.quantity()+"' data-price='"+s.product().sellingPrice()+"' value='"+html(s.product().sku())+"'>"+html(s.product().sku()+" · "+s.product().name())+" ("+s.quantity()+" available)</option>").collect(java.util.stream.Collectors.joining());
+        StringBuilder out=new StringBuilder(section("new-sale","New customer order","Choose products, check quantities, then place the order."));
+        out.append("<div class='checkout-layout'><section class='panel product-picker' hidden id='product-picker'><h3>Choose products</h3><label>Find a product<input type='search' id='cart-search' placeholder='Search name or SKU' autocomplete='off'></label><div class='checkout-products'>");
+        for(var stock:inventory.listProducts(actor)) {
+            var product=stock.product();
+            if(!product.active() || product.details().category()==com.inventory.model.ProductCategory.LEGACY) continue;
+            out.append("<article class='checkout-product' data-search='").append(html(product.name()+" "+product.sku())).append("'><small>").append(html(product.category())).append("</small><h4>").append(html(product.name())).append("</h4><span class='muted'>").append(html(product.sku())).append("</span><strong>INR ").append(product.sellingPrice()).append("</strong><span>").append(stock.quantity()).append(" in stock</span><button type='button' class='add-to-cart' data-sku='").append(html(product.sku())).append("'").append(stock.quantity()==0?" disabled":"").append(">"
+                ).append(stock.quantity()==0?"Out of stock":"+ Add to cart").append("</button></article>");
+        }
+        out.append("</div><p id='no-product-match' class='empty' hidden>No products match. Try a name or SKU.</p></section><section class='panel cart-panel'><h3>Customer cart</h3>").append(form("checkout",csrf))
+            .append(input("Customer name / reference","customer","text","Walk-in customer","maxlength='255'"))
+            .append("<p id='empty-cart' class='empty' hidden>Your cart is empty. Choose a product to start.</p><p id='cart-status' role='status' aria-live='polite'></p>")
+            .append("<div id='sale-lines' data-restored='").append(action.equals("/business/checkout")).append("'><div class='sale-line'><label>Product<select required name='sku0'>").append(options).append("</select></label>")
             .append(input("Quantity","qty0","number","1","min='1' max='2147483647'"))
-            .append("<button type='button' class='secondary remove-line' aria-label='Remove invoice line'>Remove</button></div></div><button class='secondary' id='add-sale-line' type='button'>Add line</button>")
-            .append(input("Invoice discount (INR)","discount","number","0.00","min='0' step='0.01'"))
+            .append("<button type='button' class='secondary remove-line' aria-label='Remove invoice line'>Remove</button></div></div><button class='secondary' id='add-sale-line' type='button'>Add another product</button>")
+            .append("<details class='cart-discount'><summary>Add a discount (optional)</summary>").append(input("Invoice discount (INR)","discount","number","0.00","min='0' step='0.01'")).append("</details>")
             .append("<div id='sale-preview' class='sale-preview' aria-live='polite'></div>")
-            .append("<p class='muted'>Prices are taken from the product catalogue when you save. Review the invoice before issuing it to the customer.</p><button>Save invoice</button></form></section><section class='panel'><h3>Invoices</h3><div class='table-wrap'><table><thead><tr><th>Invoice</th><th>Customer</th><th>Total (INR)</th><th>Date</th></tr></thead><tbody>");
+            .append("<p class='muted'>Check the items and quantities. Saving records the sale and updates stock.</p><button id='save-order'>Place order</button></form></section></div></section>")
+            .append(section("sales","Customer invoices","View customer invoices and print a copy."))
+            .append("<section class='panel' id='order-history'><div class='panel-title'><div><h3>Customer invoices</h3><p>Select an invoice to view or print it.</p></div><a class='lime-link' href='#new-sale'>New order</a></div><div class='table-wrap'><table><thead><tr><th>Invoice</th><th>Customer</th><th>Total (INR)</th><th>Date</th></tr></thead><tbody>");
         var invoices=service.invoices(actor);
-        for(var invoice:invoices) out.append("<tr><td><a href='/app?invoice=").append(invoice.get("id")).append("#sales'>").append(number(invoice)).append("</a></td><td>").append(html(invoice.get("customer"))).append("</td><td>").append(invoice.get("total")).append("</td><td>").append(date(invoice.get("created_at"))).append("</td></tr>");
-        out.append("</tbody></table></div>").append(invoices.isEmpty()?"<p class='empty'>No invoices recorded.</p>":"").append("</section></div>");
+        for(var invoice:invoices) out.append("<tr><td><a href='/app?invoice=").append(invoice.get("id")).append("#invoice-document'>").append(number(invoice)).append("</a></td><td>").append(html(invoice.get("customer"))).append("</td><td>").append(invoice.get("total")).append("</td><td>").append(date(invoice.get("created_at"))).append("</td></tr>");
+        out.append("</tbody></table></div>").append(invoices.isEmpty()?"<p class='empty'>No orders yet. Your saved orders will appear here.</p>":"").append("</section>");
         String selected=query.getOrDefault("invoice",invoices.isEmpty()?"":invoices.getFirst().get("id"));
         var invoice=invoices.stream().filter(r->r.get("id").equals(selected)).findFirst().orElse(null);
         if(invoice!=null) {
             var lines=service.lines(actor,UUID.fromString(selected));
-            out.append("<section class='panel invoice-document' id='invoice-document'><div class='panel-title'><div><small>VOLTEDGE ELECTRONICS</small><h2>").append(number(invoice)).append("</h2><p>").append(html(invoice.get("customer"))).append(" · ").append(date(invoice.get("created_at"))).append("</p></div><button type='button' id='print-invoice' class='secondary'>Print invoice</button></div><table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th><th>Returned</th></tr></thead><tbody>");
+            out.append("<section class='panel invoice-document' id='invoice-document'><div class='panel-title'><div><small>VOLTEDGE ELECTRONICS</small><h2>").append(number(invoice)).append("</h2><p>").append(html(invoice.get("customer"))).append(" · ").append(date(invoice.get("created_at"))).append("</p></div><button type='button' id='print-invoice' class='secondary'>Print invoice</button><a class='lime-link' href='#new-sale'>New order</a></div><table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th><th>Returned</th></tr></thead><tbody>");
             for(var line:lines) out.append("<tr><td>").append(html(line.get("product_name"))).append("<small>").append(html(line.get("sku"))).append("</small></td><td>").append(line.get("quantity")).append("</td><td>").append(line.get("unit_price")).append("</td><td>").append(new java.math.BigDecimal(line.get("unit_price")).multiply(new java.math.BigDecimal(line.get("quantity")))).append("</td><td>").append(line.get("returned")).append("</td></tr>");
             out.append("</tbody></table>");
             out.append("<div class='invoice-totals'><p>Subtotal <strong>INR ").append(invoice.get("subtotal")).append("</strong></p><p>Discount <strong>INR ").append(invoice.get("discount")).append("</strong></p><p>Total <strong>INR ").append(invoice.get("total")).append("</strong></p></div><p class='muted'>Sales invoice · Payment collection is recorded separately. No tax calculation is applied.</p></section>");

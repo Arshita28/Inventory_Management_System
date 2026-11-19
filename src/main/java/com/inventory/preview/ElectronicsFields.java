@@ -15,9 +15,11 @@ final class ElectronicsFields {
             case AUDIO -> select("Audio connection", "connection", fields, "WIRED", "WIRELESS")
                     + select("Microphone", "microphone", fields, "false", "true")
                     + number("Battery hours (0 for wired)", "batteryHours", fields, 0);
-            case COMPUTER_ACCESSORIES -> text("Accessory type", "accessoryType", fields, true)
-                    + text("Connection type", "connection", fields, true)
-                    + text("Supported operating systems", "supportedOs", fields, true);
+            case COMPUTER_ACCESSORIES -> "<label>Product type<input required type='text' name='accessoryType' maxlength='255' placeholder='e.g. Monitor, keyboard, mouse' value='"
+                    + InventoryPage.html(fields.getOrDefault("accessoryType", "")) + "'></label>"
+                    + "<label>Ports / connection (optional)<input type='text' name='connection' maxlength='255' placeholder='e.g. HDMI, DisplayPort, USB-C' value='"
+                    + InventoryPage.html(fields.getOrDefault("connection", "")) + "'></label>"
+                    + "<input type='hidden' name='supportedOs' value='" + InventoryPage.html(fields.getOrDefault("supportedOs", "")) + "'>";
             case STORAGE -> number("Capacity (GB)", "capacityGb", fields, 1)
                     + text("Storage interface", "storageInterface", fields, true)
                     + text("Supported devices", "supportedDevices", fields, true);

@@ -29,7 +29,7 @@ function showView(hash, focus = false) {
     let targetId;
     try { targetId = decodeURIComponent(hash.replace(/^#/, '')); }
     catch { targetId = ''; }
-    if (targetId === 'home') targetId = 'dashboard';
+    if (targetId === 'home') targetId = document.body.dataset.initialView;
     const target = document.getElementById(targetId);
     const view = target?.closest('[data-view]')
         || views.find(item => item.dataset.view === document.body.dataset.initialView)
@@ -93,37 +93,122 @@ for (const form of document.querySelectorAll('form[method="get"]')) {
 showView(location.hash);
 
 const saleLines = document.querySelector('#sale-lines');
-let nextLine = Math.max(0, ...[...(saleLines?.querySelectorAll('[name^="sku"]') || [])].map(field => Number(field.name.slice(3)))) + 1;
-document.querySelector('#add-sale-line')?.addEventListener('click', () => {
-    if (nextLine >= 20) return;
-    const row = saleLines.querySelector('.sale-line').cloneNode(true);
-    row.querySelectorAll('[name]').forEach(field => {
-        field.name = field.name.replace(/\d+$/, String(nextLine));
-        if (field.tagName === 'INPUT') field.value = field.name.startsWith('qty') ? '1' : '';
-    });
-    nextLine++;
-    saleLines.append(row);
-});
-saleLines?.addEventListener('click', event => {
-    if (event.target.closest('.remove-line') && saleLines.children.length > 1) event.target.closest('.sale-line').remove();
-});
-document.querySelector('#print-invoice')?.addEventListener('click', () => window.print());
-function updateSalePreview() {
-    if (!saleLines) return;
-    let subtotal = 0;
-    saleLines.querySelectorAll('.sale-line').forEach(row => {
+const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value / 100);
+if (saleLines) {
+    const form = saleLines.closest('form');
+    const template = saleLines.querySelector('.sale-line').cloneNode(true);
+    const picker = document.querySelector('#product-picker');
+    const status = document.querySelector('#cart-status');
+    const rows = () => [...saleLines.querySelectorAll('.sale-line')];
+    const announce = text => { status.textContent = text; };
+    function enhance(row) {
         const select = row.querySelector('select');
-        const quantity = Number(row.querySelector('[name^="qty"]').value);
-        subtotal += Math.round(Number(select.selectedOptions[0]?.dataset.price || 0) * 100) * quantity;
+        const quantity = row.querySelector('[name^="qty"]');
+        const option = select.selectedOptions[0];
+        const sku = select.value;
+        const name = option.textContent.replace(/ \(\d+ available\)$/, '');
+        select.hidden = true;
+        select.parentElement.classList.add('cart-product-label');
+        const title = document.createElement('strong');
+        title.textContent = name;
+        select.parentElement.append(title);
+        const price = document.createElement('small');
+        price.textContent = `${money(Math.round(Number(option.dataset.price) * 100))} each · ${option.dataset.stock} available`;
+        select.parentElement.append(price);
+        quantity.max = option.dataset.stock;
+        quantity.setAttribute('aria-label', `Quantity for ${name}`);
+        quantity.parentElement.querySelector('.field-hint')?.remove();
+        const controls = document.createElement('span');
+        controls.className = 'cart-quantity';
+        quantity.before(controls);
+        for (const [symbol, delta, label] of [['−', -1, 'Decrease'], ['+', 1, 'Increase']]) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.textContent = symbol;
+            button.className = 'secondary quantity-step';
+            button.dataset.delta = delta;
+            button.setAttribute('aria-label', `${label} quantity for ${name}`);
+            controls.append(button);
+            if (delta === -1) controls.append(quantity);
+        }
+        row.querySelector('.remove-line').setAttribute('aria-label', `Remove ${name} from cart`);
+        row.dataset.sku = sku;
+        const amount = document.createElement('strong');
+        amount.className = 'cart-line-total'; row.append(amount);
+    }
+    if (saleLines.dataset.restored !== 'true') saleLines.replaceChildren();
+    else rows().forEach(enhance);
+    picker.hidden = false;
+    document.querySelector('#add-sale-line').hidden = true;
+    function update() {
+        let subtotal = 0;
+        rows().forEach((row, i) => {
+            const select = row.querySelector('select');
+            const qty = row.querySelector('input');
+            select.name = `sku${i}`; qty.name = `qty${i}`;
+            const amount = Math.round(Number(select.selectedOptions[0].dataset.price) * 100) * (Number(qty.value) || 0);
+            subtotal += amount;
+            row.querySelector('.cart-line-total').textContent = money(amount);
+            row.querySelector('[data-delta="-1"]').disabled = Number(qty.value) <= 1;
+            row.querySelector('[data-delta="1"]').disabled = Number(qty.value) >= Number(qty.max);
+        });
+        const discount = form.querySelector('[name="discount"]');
+        discount.max = (subtotal / 100).toFixed(2);
+        const discountCents = Math.round(Number(discount.value || 0) * 100);
+        document.querySelector('#sale-preview').textContent = `Subtotal ${money(subtotal)} · Discount ${money(discountCents)} · Total ${money(subtotal - discountCents)}`;
+        document.querySelector('#empty-cart').hidden = rows().length > 0;
+        document.querySelector('#save-order').disabled = rows().length === 0;
+        document.querySelectorAll('.add-to-cart').forEach(button => {
+            const option = [...template.querySelector('select').options].find(item => item.value === button.dataset.sku);
+            const row = rows().find(item => item.dataset.sku === button.dataset.sku);
+            button.disabled = Number(option?.dataset.stock || 0) <= Number(row?.querySelector('input').value || 0);
+        });
+    }
+    picker.addEventListener('click', event => {
+        const button = event.target.closest('.add-to-cart');
+        if (!button) return;
+        let row = rows().find(item => item.dataset.sku === button.dataset.sku);
+        if (row) {
+            const qty = row.querySelector('input');
+            if (Number(qty.value) >= Number(qty.max)) return;
+            qty.value = Math.min(Number(qty.max), Math.max(1, Number(qty.value) || 0) + 1);
+            qty.setCustomValidity('');
+        } else {
+            if (rows().length >= 20) { announce('A cart can hold up to 20 different products. Save this order before starting another.'); return; }
+            row = template.cloneNode(true);
+            row.querySelector('select').value = button.dataset.sku;
+            row.querySelector('input').value = '1';
+            enhance(row); saleLines.append(row);
+        }
+        announce('Added to cart. Review the quantity on the right.'); update();
     });
-    const discount = Math.round(Number(document.querySelector('[name="discount"]').value || 0) * 100);
-    const formatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
-    document.querySelector('#sale-preview').textContent = `Subtotal ${formatter.format(subtotal / 100)} · Discount ${formatter.format(discount / 100)} · Total ${formatter.format((subtotal - discount) / 100)}`;
+    saleLines.addEventListener('click', event => {
+        const row = event.target.closest('.sale-line');
+        if (!row) return;
+        if (event.target.closest('.remove-line')) { row.remove(); announce('Item removed from cart.'); }
+        const step = event.target.closest('.quantity-step');
+        if (step) {
+            const qty = row.querySelector('input');
+            qty.value = Math.max(1, Math.min(Number(qty.max), (Number(qty.value) || 1) + Number(step.dataset.delta)));
+            qty.setCustomValidity('');
+        }
+        update();
+    });
+    form.addEventListener('input', update);
+    form.addEventListener('submit', event => {
+        if (!rows().length) { event.preventDefault(); announce('Add a product to the cart first.'); }
+    });
+    document.querySelector('#cart-search').addEventListener('input', event => {
+        const search = event.target.value.trim().toLowerCase();
+        let visible = 0;
+        picker.querySelectorAll('.checkout-product').forEach(card => {
+            card.hidden = !card.dataset.search.toLowerCase().includes(search);
+            if (!card.hidden) visible++;
+        });
+        document.querySelector('#no-product-match').hidden = visible > 0;
+    });
+    update();
 }
-saleLines?.closest('form').addEventListener('input', updateSalePreview);
-saleLines?.closest('form').addEventListener('change', updateSalePreview);
-saleLines?.closest('form').addEventListener('click', () => queueMicrotask(updateSalePreview));
-updateSalePreview();
+document.querySelector('#print-invoice')?.addEventListener('click', () => window.print());
 
 // Block incompatible characters while typing or pasting; Java validates every submission too.
 function validateNumericField(field) {
